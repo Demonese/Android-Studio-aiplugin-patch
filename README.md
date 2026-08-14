@@ -112,3 +112,13 @@ cd aiplugin-patch
 - 构建分多阶段：先 ASM 给 `RemoteProviderData`/`OpenAiModelApi` 加字段与访问器，
   新增的 UI/Support 类才能编译通过
 - 详细插入点与设计决策见 `docs/patch-design.md`
+
+## 效果展示
+
+Model Providers 设置界面：
+
+![Model Providers](docs/model-providers.jpg)
+
+Deepseek V4 Pro 修复：
+
+![Deepseek V4 Pro 修复](docs/deepseek-v4-pro-fix.jpg)
