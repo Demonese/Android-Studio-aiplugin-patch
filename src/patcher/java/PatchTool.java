@@ -22,6 +22,7 @@ public class PatchTool {
     static final String COMPLETION_V2 = "com/android/studio/ml/backends/openai/OpenAiCompletionApiV2";
     static final String COMPLETION_SUPPORT = "com/android/studio/ml/backends/openai/OpenAiCompletionSupport";
     static final String ASSISTANT_BUILDER = "com/openai/models/chat/completions/ChatCompletionAssistantMessageParam$Builder";
+    static final String CC_PARAMS_BUILDER = "com/openai/models/chat/completions/ChatCompletionCreateParams$Builder";
     static final String MSG_PARAM = "com/openai/models/chat/completions/ChatCompletionMessageParam";
     static final String CHAT_MESSAGE = "com/google/studiobot/datamodel/models/ModelChatMessage";
 
@@ -397,6 +398,12 @@ public class PatchTool {
     // aload_2（builder）之前插入 OpenAiCompletionSupport.attachReasoningContent，
     // thought 非空时经 builder.putAdditionalProperty 附加 reasoning_content。
     // 插入点非跳转目标、栈中仅 Companion，直线调用不改分支、不新增帧。
+    //
+    // OpenAiCompletionApiV2.createParams：系统消息恒用 system role。
+    // 原逻辑仅当 useSystemMessage（唯一调用方 OpenAiModelApi 硬编码 false）或
+    // JVM 属性 studio.ml.openai.chat.sendAsSystemMessage=true 时用 addSystemMessage，
+    // 否则 addDeveloperMessage；众多第三方兼容供应商不认 developer role 直接 400。
+    // OpenAI 官方仍兼容 system role，故把 addDeveloperMessage 调用改写为 addSystemMessage。
     static void patchCompletionApi(Path in, Path out) throws Exception {
         ClassNode cn = new ClassNode();
         new ClassReader(readClass(in, COMPLETION_V2)).accept(cn, 0);
@@ -413,6 +420,12 @@ public class PatchTool {
         l.add(new MethodInsnNode(INVOKESTATIC, COMPLETION_SUPPORT, "attachReasoningContent",
                 "(L" + ASSISTANT_BUILDER + ";L" + CHAT_MESSAGE + ";)V", false));
         m.instructions.insertBefore(aloadBuilder, l);
+
+        MethodNode cp = findMethod(cn, "createParams", null);
+        AbstractInsnNode devCall = findInvoke(cp, CC_PARAMS_BUILDER, "addDeveloperMessage",
+                "(Ljava/lang/String;)L" + CC_PARAMS_BUILDER + ";");
+        cp.instructions.set(devCall, new MethodInsnNode(INVOKEVIRTUAL, CC_PARAMS_BUILDER, "addSystemMessage",
+                "(Ljava/lang/String;)L" + CC_PARAMS_BUILDER + ";", false));
 
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);

@@ -70,9 +70,10 @@ ASM 补丁（v3）
 
 ASM 补丁（v4）
 └── OpenAiCompletionApiV2
-    └── toMessageParam(ModelChatMessage)：return ofAssistant(builder.build()) 前、
-                 aload_2（builder）之前插入
-                 OpenAiCompletionSupport.attachReasoningContent（回传 reasoning_content）
+    ├── toMessageParam(ModelChatMessage)：return ofAssistant(builder.build()) 前、
+    │            aload_2（builder）之前插入
+    │            OpenAiCompletionSupport.attachReasoningContent（回传 reasoning_content）
+    └── createParams：addDeveloperMessage 调用改写为 addSystemMessage（v5）
 ```
 
 ### 设计要点
@@ -147,7 +148,8 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 4. `ResponsesReasoningTest`：真实 `createParams` 验证缺失思考轮次补占位 reasoning、
    已有思考/签名不重复注入、其他模型消息不注入。
 5. `CompletionReasoningTest`：真实 `createParams` 验证 thought 非空时 assistant 消息
-   附加 `reasoning_content`、tool_calls 保留、thought 为 null/空串时不附加。
+   附加 `reasoning_content`、tool_calls 保留、thought 为 null/空串时不附加；
+   并验证系统消息恒为 `system` role（v5）。
 6. `UiLoadTest`：新增类可加载、枚举值正确。
 
 ## 安装与测试
@@ -247,3 +249,26 @@ v4 是"已有时回传"（Chat Completions 仅在 thought 非空时附加，不�
 **验证**：`CompletionReasoningTest` 用真实 `createParams` 构造含 3 类 assistant 历史
 消息的请求：thought 非空 → `reasoning_content` 等于原思考文本且 tool_calls 保留；
 thought 为 null/空串 → 不附加。CheckClassAdapter 通过。
+
+## v5 修复：Chat Completions 系统消息 developer role 导致第三方供应商 400
+
+**现象**：部分 OpenAI 兼容供应商对 `developer` role 返回 400（只认 `system`）。
+
+**现状确认（插件无对应设置项）**：
+- provider 数据模型与 UI 中没有任何 developer/system role 相关开关；
+- `createParams(useSystemMessage=...)` 参数存在，但唯一调用方 `OpenAiModelApi`
+  硬编码传 false → 恒走 `addDeveloperMessage`；
+- JVM 属性 `studio.ml.openai.chat.sendAsSystemMessage=true` 可强制 system，
+  但需改 IDE vmoptions，普通用户不可见；
+- 旧版 chat 路径 `OpenAiChatImpl` 有 `INVALID_MESSAGE_ROLE` 自动重试学习
+  （developer 失败后记住该模型改用 system），agent 主路径没有此机制。
+
+**修复**（ASM，`patchCompletionApi`）：把 `createParams` 中
+`ChatCompletionCreateParams$Builder.addDeveloperMessage` 调用原地改写为
+`addSystemMessage`（描述符相同，三元两个分支殊途同归）。OpenAI 官方仍兼容
+`system` role（`developer` 仅为 2024-12 起的改名），故恒 system 对官方与第三方均安全。
+仅补丁 agent 主路径使用的 `OpenAiCompletionApiV2`；V1 `OpenAiCompletionApi`
+（旧 chat 路径）自带重试学习，不动。
+
+**验证**：`CompletionReasoningTest` 断言 `useSystemMessage=false` 构造出的首条消息
+`isSystem() && !isDeveloper()`。CheckClassAdapter 通过。

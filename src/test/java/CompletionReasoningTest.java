@@ -29,6 +29,9 @@ public class CompletionReasoningTest {
         List<ChatCompletionMessageParam> messages = params.messages();
         check(messages.size() == 4, "消息数 = 1 系统 + 3 assistant（实际 " + messages.size() + "）");
 
+        check(messages.get(0).isSystem() && !messages.get(0).isDeveloper(),
+                "系统消息用 system role（useSystemMessage=false 时也不再是 developer）");
+
         ChatCompletionAssistantMessageParam a0 = messages.get(1).asAssistant();
         JsonValue rc = a0._additionalProperties().get(OpenAiCompletionSupport.REASONING_CONTENT_KEY);
         check(rc != null && "思考内容".equals(rc.convert(String.class)),

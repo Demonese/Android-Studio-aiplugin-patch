@@ -26,7 +26,10 @@ Android Studio 的 AI 功能对 OpenAI 兼容 provider **默认先调 Responses 
   对缺失思考的 assistant 轮次自动补占位思考内容；
 - Chat Completions API：原实现丢弃 assistant 消息的思考内容，
   现将已收到的 thought 作为 `reasoning_content` 附加字段回传，
-  避免 `400: The reasoning_content in the thinking mode must be passed back to the API`。
+  避免 `400: The reasoning_content in the thinking mode must be passed back to the API`；
+- Chat Completions API 系统消息 role：原实现在 `useSystemMessage=false`
+  （agent 主路径硬编码）时发送 `developer` role，众多第三方兼容供应商不认而报 400，
+  现恒用 `system` role（OpenAI 官方仍兼容）。
 
 ## 目录结构
 
