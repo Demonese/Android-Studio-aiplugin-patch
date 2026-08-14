@@ -34,7 +34,8 @@
 ├── OpenAiApiTypeConverter   xmlb Converter（模仿 ApiSchemaConverter）
 ├── OpenAiApiTypeUi          UI 辅助：行创建/可见性联动/回写（状态 WeakHashMap 按面板实例保存）
 ├── OpenAiApiTypeSupport     后端决策：resolveUseResponses / allowResponsesFallback
-└── OpenAiResponsesSupport   Responses 请求构造：缺失思考时补占位 reasoning item
+├── OpenAiResponsesSupport   Responses 请求构造：缺失思考时补占位 reasoning item
+└── OpenAiCompletionSupport  Chat Completions 请求构造：回传 reasoning_content
 
 ASM 补丁（PatchTool.java）
 ├── ProviderData$RemoteProviderData
@@ -66,6 +67,12 @@ ASM 补丁（v3）
 └── OpenAiResponsesApiV2
     └── toInputItem(ModelChatMessage,...)：toolCalls 循环汇合点插入
                  OpenAiResponsesSupport.ensureReasoning（补占位思考）
+
+ASM 补丁（v4）
+└── OpenAiCompletionApiV2
+    └── toMessageParam(ModelChatMessage)：return ofAssistant(builder.build()) 前、
+                 aload_2（builder）之前插入
+                 OpenAiCompletionSupport.attachReasoningContent（回传 reasoning_content）
 ```
 
 ### 设计要点
@@ -131,7 +138,7 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 
 ## 验证（scripts/40_verify.sh）
 
-1. `CheckClassAdapter`：六个被补丁类的字节码合法性（含类型分析）。
+1. `CheckClassAdapter`：七个被补丁类的字节码合法性（含类型分析）。
 2. `SerializeTest`：真实平台 jar 上运行 `XmlSerializer` 往返：
    序列化出现 `openAiApiType` option；反序列化还原；构造默认 AUTO；
    `copy()` 与 `copy(4参)` 保留字段；equals/hashCode 感知字段。
@@ -139,7 +146,9 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    以及 `streamGenerateContent` 在三种模式下均正常返回 Flow。
 4. `ResponsesReasoningTest`：真实 `createParams` 验证缺失思考轮次补占位 reasoning、
    已有思考/签名不重复注入、其他模型消息不注入。
-5. `UiLoadTest`：新增类可加载、枚举值正确。
+5. `CompletionReasoningTest`：真实 `createParams` 验证 thought 非空时 assistant 消息
+   附加 `reasoning_content`、tool_calls 保留、thought 为 null/空串时不附加。
+6. `UiLoadTest`：新增类可加载、枚举值正确。
 
 ## 安装与测试
 
@@ -209,3 +218,32 @@ helper 仅在两者皆空且模型匹配时注入 → 不会重复注入。
 **验证**：`ResponsesReasoningTest` 用真实 `createParams` 构造含 4 类历史消息的请求：
 无思考+工具调用轮次 → 补 1 个占位思考；有思考轮次 → 保留原文本；
 仅有签名轮次 → 保留签名项不注入；其他模型消息 → 不注入。CheckClassAdapter 通过。
+
+## v4 修复：Chat Completions API 不回传思考内容（reasoning_content）
+
+**现象**：DeepSeek/Qwen 思考模式走 Chat Completions 协议多轮对话（含工具调用）时
+报 `400: The reasoning_content in the thinking mode must be passed back to the API.`
+
+**根因**：接收方向没问题——`OpenAiCompletionApiV2.thinkingDelta` 已按
+`reasoning_content` → `reasoning` → `thinking` → `reasoning_text` 顺序从流式 delta 的
+附加属性读取思考内容，并经 `ModelResponse.deltaThinking` → 轨迹累积 → 写入
+`ModelChatMessage.thought`。但**请求方向**的 `toMessageParam(ModelChatMessage)`
+只构造 `content` 与 `tool_calls`，完全丢弃 `thought`，下一轮请求缺少 reasoning_content。
+
+**修复**：新增 `OpenAiCompletionSupport.attachReasoningContent(builder, message)`：
+`thought` 非空时经 `builder.putAdditionalProperty("reasoning_content", JsonValue.from(thought))`
+附加到 assistant 消息。SDK 序列化时附加字段随消息发出；OpenAI 官方等不支持该字段的
+服务端会忽略未知字段，无副作用。
+
+**注入点**（ASM，`patchCompletionApi`）：`toMessageParam(ModelChatMessage)` 末尾
+`return ofAssistant(builder.build())`——`getstatic Companion` 之后、`aload_2`（builder）
+之前插入 `aload_2; aload_1; invokestatic attachReasoningContent`。插入点非跳转目标、
+方法无 StackMapTable 显式帧，直线调用不改分支、不新增帧。局部变量：0=this、
+1=ModelChatMessage、2=builder。
+
+**与 v3 的区别**：v3 是"缺失时补占位"（Responses 的 reasoning item 结构要求每轮必带）；
+v4 是"已有时回传"（Chat Completions 仅在 thought 非空时附加，不伪造内容）。
+
+**验证**：`CompletionReasoningTest` 用真实 `createParams` 构造含 3 类 assistant 历史
+消息的请求：thought 非空 → `reasoning_content` 等于原思考文本且 tool_calls 保留；
+thought 为 null/空串 → 不附加。CheckClassAdapter 通过。

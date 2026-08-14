@@ -49,6 +49,7 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/android/studio/ml/backends/openai/OpenAiModelApi\$streamGenerateContent\$1.class" \
   -C "$PATCHED" "com/android/studio/ml/backends/openai/OpenAiModelApiProvider.class" \
   -C "$PATCHED" "com/android/studio/ml/backends/openai/OpenAiResponsesApiV2.class" \
+  -C "$PATCHED" "com/android/studio/ml/backends/openai/OpenAiCompletionApiV2.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiType.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiTypeConverter.class" \
   -C "$OUT" "com/android/studio/ml/backends/settings/OpenAiApiTypeUi.class" \
@@ -56,7 +57,8 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$OUT" "com/android/studio/ml/backends/settings/OpenAiApiTypeUi\$State\$1.class" \
   -C "$OUT" "com/android/studio/ml/backends/settings/OpenAiApiTypeUi\$1.class" \
   -C "$OUT" "com/android/studio/ml/backends/openai/OpenAiApiTypeSupport.class" \
-  -C "$OUT" "com/android/studio/ml/backends/openai/OpenAiResponsesSupport.class"
+  -C "$OUT" "com/android/studio/ml/backends/openai/OpenAiResponsesSupport.class" \
+  -C "$OUT" "com/android/studio/ml/backends/openai/OpenAiCompletionSupport.class"
 
 unzip -t "$DIST/aiplugin-patched.jar" > /dev/null
 echo "== 构建完成：$DIST/aiplugin-patched.jar =="

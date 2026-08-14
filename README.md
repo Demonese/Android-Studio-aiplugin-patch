@@ -20,9 +20,13 @@ Android Studio 的 AI 功能对 OpenAI 兼容 provider **默认先调 Responses 
 （仅 OpenAI-compatible 时可见），选项 `Auto / OpenAI Chat Completions API / OpenAI Responses API`，
 持久化到 provider 配置，并**让该选项实际控制 API 调用**：
 固定为某一协议时不再做 Responses→Completions 的自动回退。
-此外修复 DeepSeek 思考模式下因部分轮次无思考块导致的
-`400: The reasoning_text in the thinking mode must be passed back to the API`：
-对缺失思考的 assistant 轮次自动补占位思考内容。
+此外修复思考模式（DeepSeek/Qwen 等）多轮对话的思考内容回传问题：
+- Responses API：部分轮次无思考块导致
+  `400: The reasoning_text in the thinking mode must be passed back to the API`，
+  对缺失思考的 assistant 轮次自动补占位思考内容；
+- Chat Completions API：原实现丢弃 assistant 消息的思考内容，
+  现将已收到的 thought 作为 `reasoning_content` 附加字段回传，
+  避免 `400: The reasoning_content in the thinking mode must be passed back to the API`。
 
 ## 目录结构
 
@@ -46,9 +50,10 @@ aiplugin-patch/
 │   │       ├── modelproviders/data/OpenAiApiTypeConverter.java
 │   │       ├── backends/settings/OpenAiApiTypeUi.java
 │   │       ├── backends/openai/OpenAiApiTypeSupport.java
-│   │       └── backends/openai/OpenAiResponsesSupport.java
+│   │       ├── backends/openai/OpenAiResponsesSupport.java
+│   │       └── backends/openai/OpenAiCompletionSupport.java
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具
-│   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest / UiLoadTest
+│   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest / CompletionReasoningTest / UiLoadTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
 │   └── patch-design.md        # 补丁设计、插入点、后端协议控制

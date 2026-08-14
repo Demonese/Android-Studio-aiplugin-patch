@@ -19,6 +19,10 @@ public class PatchTool {
     static final String SUPPORT = "com/android/studio/ml/backends/openai/OpenAiApiTypeSupport";
     static final String RESPONSES_V2 = "com/android/studio/ml/backends/openai/OpenAiResponsesApiV2";
     static final String RESPONSES_SUPPORT = "com/android/studio/ml/backends/openai/OpenAiResponsesSupport";
+    static final String COMPLETION_V2 = "com/android/studio/ml/backends/openai/OpenAiCompletionApiV2";
+    static final String COMPLETION_SUPPORT = "com/android/studio/ml/backends/openai/OpenAiCompletionSupport";
+    static final String ASSISTANT_BUILDER = "com/openai/models/chat/completions/ChatCompletionAssistantMessageParam$Builder";
+    static final String MSG_PARAM = "com/openai/models/chat/completions/ChatCompletionMessageParam";
     static final String CHAT_MESSAGE = "com/google/studiobot/datamodel/models/ModelChatMessage";
 
     public static void main(String[] args) throws Exception {
@@ -245,6 +249,7 @@ public class PatchTool {
         patchCatchHandler(in, out);
         patchProvider(in, out);
         patchResponsesApi(in, out);
+        patchCompletionApi(in, out);
     }
 
     // OpenAiModelApi：加 openAiApiType 字段/getter/setter（默认 AUTO），
@@ -384,5 +389,34 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, RESPONSES_V2, cw.toByteArray());
         System.out.println("patched " + RESPONSES_V2);
+    }
+
+    // OpenAiCompletionApiV2.toMessageParam(ModelChatMessage)：DeepSeek/Qwen 思考模式要求
+    // 多轮回传 assistant 消息的 reasoning_content，原逻辑只发 content 与 tool_calls。
+    // 方法末尾 return ofAssistant(builder.build())：getstatic Companion 之后、
+    // aload_2（builder）之前插入 OpenAiCompletionSupport.attachReasoningContent，
+    // thought 非空时经 builder.putAdditionalProperty 附加 reasoning_content。
+    // 插入点非跳转目标、栈中仅 Companion，直线调用不改分支、不新增帧。
+    static void patchCompletionApi(Path in, Path out) throws Exception {
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, COMPLETION_V2)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "toMessageParam", "(L" + CHAT_MESSAGE + ";)L" + MSG_PARAM + ";");
+        AbstractInsnNode build = findInvoke(m, ASSISTANT_BUILDER, "build",
+                "()Lcom/openai/models/chat/completions/ChatCompletionAssistantMessageParam;");
+        AbstractInsnNode aloadBuilder = build.getPrevious();
+        if (aloadBuilder == null || aloadBuilder.getOpcode() != ALOAD || ((VarInsnNode) aloadBuilder).var != 2) {
+            throw new IllegalStateException("expected aload_2 before Builder.build() in toMessageParam");
+        }
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, 2));
+        l.add(new VarInsnNode(ALOAD, 1));
+        l.add(new MethodInsnNode(INVOKESTATIC, COMPLETION_SUPPORT, "attachReasoningContent",
+                "(L" + ASSISTANT_BUILDER + ";L" + CHAT_MESSAGE + ";)V", false));
+        m.instructions.insertBefore(aloadBuilder, l);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, COMPLETION_V2, cw.toByteArray());
+        System.out.println("patched " + COMPLETION_V2);
     }
 }

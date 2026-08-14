@@ -44,6 +44,7 @@ unzip -o -q "$WORK/as/plugin/aiplugin.jar" \
   "com/android/studio/ml/backends/openai/OpenAiModelApi\$streamGenerateContent\$1.class" \
   "com/android/studio/ml/backends/openai/OpenAiModelApiProvider.class" \
   "com/android/studio/ml/backends/openai/OpenAiResponsesApiV2.class" \
+  "com/android/studio/ml/backends/openai/OpenAiCompletionApiV2.class" \
   -d "$WORK/classes-orig"
 
 echo "== 提取完成 =="

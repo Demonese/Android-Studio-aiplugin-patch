@@ -4,7 +4,8 @@
 #   2) SerializeTest：xmlb 序列化往返 + 默认值 + copy()/equals/hashCode
 #   3) ApiProtocolTest：协议选择与回退控制行为测试
 #   4) ResponsesReasoningTest：Responses 请求缺失思考时补占位思考
-#   5) UiLoadTest：新增 UI 类加载
+#   5) CompletionReasoningTest：Chat Completions 请求回传 reasoning_content
+#   6) UiLoadTest：新增 UI 类加载
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -20,36 +21,42 @@ PLIB="$(plugin_lib_cp)"
 TESTOUT="$WORK/test-out"
 mkdir -p "$TESTOUT"
 
-echo "[1/4] 字节码校验 (CheckClassAdapter) ..."
+echo "[1/6] 字节码校验 (CheckClassAdapter) ..."
 for c in \
   "com.android.studio.ml.modelproviders.data.ProviderData\$RemoteProviderData" \
   "com.android.studio.ml.backends.settings.RemoteModelProviderInfoPanel" \
   "com.android.studio.ml.backends.openai.OpenAiModelApi" \
   "com.android.studio.ml.backends.openai.OpenAiModelApi\$streamGenerateContent\$1" \
   "com.android.studio.ml.backends.openai.OpenAiModelApiProvider" \
-  "com.android.studio.ml.backends.openai.OpenAiResponsesApiV2"; do
+  "com.android.studio.ml.backends.openai.OpenAiResponsesApiV2" \
+  "com.android.studio.ml.backends.openai.OpenAiCompletionApiV2"; do
   java -cp "$ASMC:$DIST_JAR:$PLUGIN_JAR:$PLAT:$PLIB:$FULL:$WORK/out" \
     org.objectweb.asm.util.CheckClassAdapter "$c"
   echo "    ok: $c"
 done
 
-echo "[2/5] 序列化往返测试 ..."
+echo "[2/6] 序列化往返测试 ..."
 RT_CP="$DIST_JAR:$FULL:$PLIB:$KOTLIN_STDLIB"
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/SerializeTest.java"
 java -cp "$RT_CP:$TESTOUT" SerializeTest | grep -E "serialized|restored|default|copy|ok:|info:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" SerializeTest | grep -q ALL_OK || { echo "[!] SerializeTest 失败"; exit 1; }
 
-echo "[3/5] 协议选择与回退控制测试 ..."
+echo "[3/6] 协议选择与回退控制测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ApiProtocolTest.java"
 java -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -q ALL_OK || { echo "[!] ApiProtocolTest 失败"; exit 1; }
 
-echo "[4/5] Responses 思考回退补全测试 ..."
+echo "[4/6] Responses 思考回退补全测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ResponsesReasoningTest.java"
 java -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -q ALL_OK || { echo "[!] ResponsesReasoningTest 失败"; exit 1; }
 
-echo "[5/5] UI 类加载测试 ..."
+echo "[5/6] Chat Completions reasoning_content 回传测试 ..."
+javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/CompletionReasoningTest.java"
+java -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -E "ok:|FAILED|ALL_OK"
+java -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -q ALL_OK || { echo "[!] CompletionReasoningTest 失败"; exit 1; }
+
+echo "[6/6] UI 类加载测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
 java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|fromId|UI_CLASSES_LOAD_OK"
 java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }
