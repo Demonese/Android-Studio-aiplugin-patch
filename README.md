@@ -1,6 +1,14 @@
-# aiplugin-patch
+# Android Studio aiplugin patch
 
 对 Android Studio Gemini 插件（`plugins/gemini/lib/aiplugin.jar`，闭源）的字节码补丁项目。
+
+## AI 辅助编程披露
+
+该项目完全由 Qwen3.8-Max 自主完成，我没有写一行代码，只负责需求规划。
+
+## 关于源代码协议
+
+Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该闭源且不公开发布。但谷歌的插件实现实在是太恶心了，我决定公开脚本和工作流，并将打补丁后的 aiplugin.jar 分享给大家。
 
 ## 背景
 
