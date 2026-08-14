@@ -37,3 +37,20 @@ plugin_lib_cp() {
 asm_cp() {
   echo "$PROJ/tools/asm-${ASM_VERSION}.jar:$PROJ/tools/asm-tree-${ASM_VERSION}.jar:$PROJ/tools/asm-util-${ASM_VERSION}.jar:$PROJ/tools/asm-analysis-${ASM_VERSION}.jar"
 }
+
+# 确保构建所需工具 jar 存在；缺失时自动运行 00_setup_tools.sh 下载（含 SHA-1 校验）
+require_tools() {
+  local j missing=0
+  local need=("$PROJ/tools/cfr-${CFR_VERSION}.jar")
+  local a
+  for a in asm asm-tree asm-util asm-analysis; do
+    need+=("$PROJ/tools/${a}-${ASM_VERSION}.jar")
+  done
+  for j in "${need[@]}"; do
+    [[ -f "$j" ]] || { missing=1; break; }
+  done
+  if [[ "$missing" -eq 1 ]]; then
+    echo "[*] tools/ 缺少工具 jar，自动运行 00_setup_tools.sh 下载 ..."
+    bash "$PROJ/scripts/00_setup_tools.sh"
+  fi
+}

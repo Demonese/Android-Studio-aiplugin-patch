@@ -12,6 +12,8 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+require_tools
+
 PATCHED="$WORK/patched"      # ASM 补丁输出的 class
 OUT="$WORK/out"              # 新编译的 class
 DIST="$PROJ/dist"

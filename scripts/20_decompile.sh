@@ -3,8 +3,8 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+require_tools
 CFR_JAR="$PROJ/tools/cfr-${CFR_VERSION}.jar"
-[[ -f "$CFR_JAR" ]] || { echo "[!] 缺少 CFR，先运行 00_setup_tools.sh"; exit 1; }
 [[ -f "$PLUGIN_JAR" ]] || { echo "[!] 缺少 $PLUGIN_JAR，先运行 10_extract_jars.sh"; exit 1; }
 
 OUT="$WORK/decompiled"

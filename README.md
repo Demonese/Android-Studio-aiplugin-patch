@@ -23,12 +23,13 @@ aiplugin-patch/
 ├── README.md
 ├── config.env                 # 路径/版本配置
 ├── scripts/
-│   ├── 00_setup_tools.sh      # 准备 JDK21 + CFR + ASM
+│   ├── 00_setup_tools.sh      # 下载/校验工具 jar（CFR + ASM，SHA-1 校验，支持镜像）
 │   ├── 10_extract_jars.sh     # 从 Android Studio.zip 提取 jar/class
 │   ├── 20_decompile.sh        # CFR 反编译（分析用）
-│   ├── 30_build_patch.sh      # 两阶段 ASM 补丁 + 编译 + 组装补丁 jar
+│   ├── 30_build_patch.sh      # 多阶段 ASM 补丁 + 编译 + 组装补丁 jar
 │   ├── 40_verify.sh           # 字节码校验 + 运行时测试
 │   └── common.sh
+├── tools/                     # 构建工具 jar（00_setup_tools.sh 下载，勿手改）
 ├── src/
 │   ├── main/java/             # 新增类源码（编译进 jar）
 │   │   └── com/android/studio/ml/
@@ -50,14 +51,34 @@ aiplugin-patch/
 
 ```bash
 cd aiplugin-patch
-./scripts/00_setup_tools.sh     # 安装/下载工具（需要网络；JDK21 需 apt）
+./scripts/00_setup_tools.sh     # 下载工具 jar（CFR/ASM，Maven Central + SHA-1 校验）
 ./scripts/10_extract_jars.sh    # 从 ../"Android Studio.zip" 提取依赖
 ./scripts/30_build_patch.sh     # 构建 dist/aiplugin-patched.jar
-./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 类加载）
+./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 行为测试 + 类加载）
 ```
 
 可选：`./scripts/20_decompile.sh` 重新生成反编译源码到 `work/decompiled/`
 （仓库上级目录的 `../aiplugin/` 是同一反编译结果的副本）。
+
+## 工具下载（tools/）
+
+`tools/` 下的 CFR 与 ASM jar 由 `scripts/00_setup_tools.sh` 从 Maven Central 下载，
+**无需手工放置**：
+
+- 版本在 `config.env`（`CFR_VERSION=0.152`、`ASM_VERSION=9.7.1`）
+- 下载先写入 `.part` 临时文件，与 Maven Central 官方 **SHA-1** 校验一致后才落盘，
+  损坏/被篡改的文件会自动重新下载
+- `20/30/40` 脚本启动时自动检查工具是否齐全，缺失会自动调用下载流程
+- 用法：
+  ```bash
+  ./scripts/00_setup_tools.sh            # 下载缺失的 jar（已有且校验通过则跳过）
+  ./scripts/00_setup_tools.sh --check    # 只校验，不下载
+  ./scripts/00_setup_tools.sh --force    # 强制全部重新下载
+  ```
+- 网络受限时可换镜像：
+  ```bash
+  MAVEN_REPO_BASE=https://maven.aliyun.com/repository/public ./scripts/00_setup_tools.sh
+  ```
 
 ## 安装补丁
 

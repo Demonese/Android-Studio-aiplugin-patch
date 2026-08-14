@@ -8,6 +8,8 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+require_tools
+
 DIST_JAR="$DIST/aiplugin-patched.jar"
 [[ -f "$DIST_JAR" ]] || { echo "[!] 缺少 $DIST_JAR，先运行 30_build_patch.sh"; exit 1; }
 
