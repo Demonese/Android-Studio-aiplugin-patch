@@ -272,3 +272,40 @@ thought 为 null/空串 → 不附加。CheckClassAdapter 通过。
 
 **验证**：`CompletionReasoningTest` 断言 `useSystemMessage=false` 构造出的首条消息
 `isSystem() && !isDeveloper()`。CheckClassAdapter 通过。
+
+## v6 思考强度：UI 下拉 + reasoningEffort 按会话持久化
+
+**目标**：Agent 发送区模型选择与 Submit 之间加思考强度下拉（none/minimal/low/
+medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.json` 的
+`reasoningEffort` 字段；旧对话缺省 medium。本轮只做 UI+持久化，未接入请求参数。
+
+**UI（复用模型选择器样式）**
+- 新增 `ThinkingEffortPicker`（`com.google.studiobot.ui.querybox`）：复用
+  `ModelPickerKt.ModelPicker` 渲染，构造合成 `ModelPickerUiState`（7 档），
+  Snapshot `MutableState` 持有状态，`refreshUi` 触发重组。
+- ASM 补丁 `QueryBoxKt.ActionsRow`：在 `ModelPicker` 调用与其后 8dp Spacer 之后
+  插入 `ThinkingEffortPicker.render(composer)` + 8dp Spacer，两侧间距一致。
+
+**持久化（kotlinx.serialization 加字段）**
+- `PersistedMetadata`：加私有字段 `reasoningEffort` + getter/setter；
+  `write$Self` 末尾直线调 `ThinkingEffortStore.encodeElement`（元素 12，
+  nullable String，非空才写）。
+- `PersistedMetadata$$serializer`：
+  - `<clinit>` descriptor 容量 12→13 + `addElement("reasoningEffort", true)`；
+  - `childSerializers()` 数组 12→13；
+  - `deserialize`：开头初始化局部 23；顺序路径与 tableswitch（max 11→12，
+    新增 case 12）各插入元素 12 读取（seen0 置位 4096）；构造后
+    `setReasoningEffort` 回填并调 `ThinkingEffortStore.onLoaded`。
+  - 因新增分支目标，用 COMPUTE_FRAMES 重算栈映射帧（`framesWriter`
+    带 classpath 的 `getCommonSuperClass`）。
+- 两处 `prepareMetadata`（TopLevel/DefaultConversation）：构造后
+  `dup + ThinkingEffortStore.applyTo` 回填。
+- `ActiveConversationOrchestrator.selectConversation`：入口通知
+  `ThinkingEffortStore.onConversationSelection` 切换/新建刷新。
+
+**运行时存储 `ThinkingEffortStore`**：`conversationId -> 档位` 映射 +
+当前会话 ID + 当前档位；加载/切换/选择/保存各钩子；新会话首次保存时绑定 ID。
+
+**验证**：`ThinkingEffortPickerTest`（下拉状态与事件）、
+`ReasoningEffortPersistTest`（kotlinx JSON 往返、旧格式解码为 null、
+null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckClassAdapter 通过。

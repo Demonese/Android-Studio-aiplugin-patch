@@ -45,6 +45,13 @@ unzip -o -q "$WORK/as/plugin/aiplugin.jar" \
   "com/android/studio/ml/backends/openai/OpenAiModelApiProvider.class" \
   "com/android/studio/ml/backends/openai/OpenAiResponsesApiV2.class" \
   "com/android/studio/ml/backends/openai/OpenAiCompletionApiV2.class" \
+  "com/google/studiobot/ui/querybox/QueryBoxKt.class" \
+  "com/google/studiobot/agentsdk/conversations/PersistedMetadata.class" \
+  "com/google/studiobot/agentsdk/conversations/PersistedMetadata\$\$serializer.class" \
+  "com/google/studiobot/agentsdk/conversations/TopLevelConversation.class" \
+  "com/google/studiobot/agentsdk/conversations/DefaultConversation.class" \
+  "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
+  "com/google/studiobot/controller/TrajectoryTimelineController.class" \
   -d "$WORK/classes-orig"
 
 echo "== 提取完成 =="

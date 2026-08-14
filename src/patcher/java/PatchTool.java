@@ -1,6 +1,8 @@
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import java.io.*;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.*;
 import java.util.*;
 
@@ -25,6 +27,25 @@ public class PatchTool {
     static final String CC_PARAMS_BUILDER = "com/openai/models/chat/completions/ChatCompletionCreateParams$Builder";
     static final String MSG_PARAM = "com/openai/models/chat/completions/ChatCompletionMessageParam";
     static final String CHAT_MESSAGE = "com/google/studiobot/datamodel/models/ModelChatMessage";
+    static final String QUERY_BOX_KT = "com/google/studiobot/ui/querybox/QueryBoxKt";
+    static final String THINKING_PICKER = "com/google/studiobot/ui/querybox/ThinkingEffortPicker";
+    static final String MODEL_PICKER_KT = "com/google/studiobot/ui/trajectory/ModelPickerKt";
+    static final String COMPOSER = "androidx/compose/runtime/Composer";
+    static final String PMETA = "com/google/studiobot/agentsdk/conversations/PersistedMetadata";
+    static final String PMETA_SER = PMETA + "$$serializer";
+    static final String TLC = "com/google/studiobot/agentsdk/conversations/TopLevelConversation";
+    static final String DC = "com/google/studiobot/agentsdk/conversations/DefaultConversation";
+    static final String ORCH = "com/google/studiobot/controller/ActiveConversationOrchestrator";
+    static final String TTC = "com/google/studiobot/controller/TrajectoryTimelineController";
+    static final String EVENT_PRESENTED = "com/google/studiobot/ui/TrajectoryEvent$ConversationPresented";
+    static final String STORE = "com/google/studiobot/ui/querybox/ThinkingEffortStore";
+    static final String KX_DESC = "kotlinx/serialization/descriptors/SerialDescriptor";
+    static final String KX_ENCODER = "kotlinx/serialization/encoding/CompositeEncoder";
+    static final String KX_DECODER = "kotlinx/serialization/encoding/CompositeDecoder";
+    static final String KX_STRING_SER = "kotlinx/serialization/internal/StringSerializer";
+    static final String KX_SER_STRAT = "kotlinx/serialization/SerializationStrategy";
+    static final String KX_DESER_STRAT = "kotlinx/serialization/DeserializationStrategy";
+    static final String KX_PLUGIN_DESC = "kotlinx/serialization/internal/PluginGeneratedSerialDescriptor";
 
     public static void main(String[] args) throws Exception {
         String cmd = args[0];
@@ -32,6 +53,12 @@ public class PatchTool {
             case "data": patchData(args[1], args[2]); break;
             case "panel": patchPanel(args[1], args[2]); break;
             case "api": patchApi(args[1], args[2]); break;
+            case "querybox": patchQueryBox(args[1], args[2]); break;
+            case "metadata": patchMetadata(args[1], args[2]); break;
+            case "metaser": patchMetadataSerializer(args[1], args[2], args[3]); break;
+            case "convmeta": patchPrepareMetadata(args[1], args[2]); break;
+            case "orch": patchOrchestrator(args[1], args[2]); break;
+            case "timeline": patchTimelineController(args[1], args[2]); break;
             default: throw new IllegalArgumentException(cmd);
         }
     }
@@ -431,5 +458,389 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, COMPLETION_V2, cw.toByteArray());
         System.out.println("patched " + COMPLETION_V2);
+    }
+
+    // QueryBoxKt.ActionsRow：在模型选择下拉（ModelPicker）与其后的 8dp Spacer 之后，
+    // 插入 ThinkingEffortPicker.render(composer) + 8dp Spacer，
+    // 即位于模型选择与发送按钮之间且两侧间距一致。
+    // 锚点：INVOKESTATIC ModelPickerKt.ModelPicker 之后第一个 INVOKESTATIC SpacerKt.Spacer；
+    // Spacer 的 composer 实参是其前第二条指令 ALOAD（前一条为 bipush 6）。
+    // 插入序列栈深度复原、无新分支、无需新帧；宽度经 Dp.constructor-impl 内联类构造。
+    static void patchQueryBox(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, QUERY_BOX_KT)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "ActionsRow", null);
+        AbstractInsnNode picker = findInvoke(m, MODEL_PICKER_KT, "ModelPicker",
+                "(Lcom/google/studiobot/ui/ModelPickerUiState;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;L" + COMPOSER + ";II)V");
+        AbstractInsnNode spacer = picker.getNext();
+        while (spacer != null && !(spacer.getType() == AbstractInsnNode.METHOD_INSN
+                && ((MethodInsnNode) spacer).owner.equals("androidx/compose/foundation/layout/SpacerKt")
+                && ((MethodInsnNode) spacer).name.equals("Spacer"))) {
+            spacer = spacer.getNext();
+        }
+        if (spacer == null) {
+            throw new IllegalStateException("Spacer after ModelPicker not found in ActionsRow");
+        }
+        AbstractInsnNode push6 = spacer.getPrevious();
+        AbstractInsnNode aload = push6 == null ? null : push6.getPrevious();
+        if (push6 == null || push6.getOpcode() != BIPUSH || ((IntInsnNode) push6).operand != 6
+                || aload == null || aload.getOpcode() != ALOAD) {
+            throw new IllegalStateException("unexpected instruction sequence before Spacer in ActionsRow");
+        }
+        int composerVar = ((VarInsnNode) aload).var;
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, composerVar));
+        l.add(new MethodInsnNode(INVOKESTATIC, THINKING_PICKER, "render", "(L" + COMPOSER + ";)V", false));
+        l.add(new FieldInsnNode(GETSTATIC, "androidx/compose/ui/Modifier", "Companion",
+                "Landroidx/compose/ui/Modifier$Companion;"));
+        l.add(new TypeInsnNode(CHECKCAST, "androidx/compose/ui/Modifier"));
+        l.add(new IntInsnNode(BIPUSH, 8));
+        l.add(new InsnNode(I2F));
+        l.add(new MethodInsnNode(INVOKESTATIC, "androidx/compose/ui/unit/Dp", "constructor-impl", "(F)F", false));
+        l.add(new MethodInsnNode(INVOKESTATIC, "androidx/compose/foundation/layout/SizeKt", "width-3ABfNKs",
+                "(Landroidx/compose/ui/Modifier;F)Landroidx/compose/ui/Modifier;", false));
+        l.add(new VarInsnNode(ALOAD, composerVar));
+        l.add(new IntInsnNode(BIPUSH, 6));
+        l.add(new MethodInsnNode(INVOKESTATIC, "androidx/compose/foundation/layout/SpacerKt", "Spacer",
+                "(Landroidx/compose/ui/Modifier;L" + COMPOSER + ";I)V", false));
+        m.instructions.insert(spacer, l);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, QUERY_BOX_KT, cw.toByteArray());
+        System.out.println("patched " + QUERY_BOX_KT);
+    }
+
+    // ===== 思考强度持久化（metadata.json 增加 reasoningEffort 字段）=====
+
+    // COMPUTE_FRAMES 写入器：$$serializer 新增 switch 分支目标需重算栈映射帧，
+    // getCommonSuperClass 从给定 classpath 加载类。
+    static ClassWriter framesWriter(String classpath) {
+        List<URL> urls = new ArrayList<>();
+        for (String p : classpath.split(File.pathSeparator)) {
+            try {
+                urls.add(new File(p).toURI().toURL());
+            } catch (Exception e) {
+                // 忽略无效条目
+            }
+        }
+        final URLClassLoader loader = new URLClassLoader(urls.toArray(new URL[0]), null);
+        return new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
+            @Override
+            protected String getCommonSuperClass(String type1, String type2) {
+                try {
+                    Class<?> c1 = Class.forName(type1.replace('/', '.'), false, loader);
+                    Class<?> c2 = Class.forName(type2.replace('/', '.'), false, loader);
+                    if (c1.isAssignableFrom(c2)) return type1;
+                    if (c2.isAssignableFrom(c1)) return type2;
+                    if (c1.isInterface() || c2.isInterface()) return "java/lang/Object";
+                    do {
+                        c1 = c1.getSuperclass();
+                    } while (!c1.isAssignableFrom(c2));
+                    return c1.getName().replace('.', '/');
+                } catch (Throwable t) {
+                    return "java/lang/Object";
+                }
+            }
+        };
+    }
+
+    // PersistedMetadata：加 reasoningEffort 字段与 getter/setter；
+    // write$Self 末尾直线调用 ThinkingEffortStore.encodeElement 写出元素 12。
+    static void patchMetadata(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, PMETA)).accept(cn, 0);
+        cn.visitField(ACC_PRIVATE, "reasoningEffort", "Ljava/lang/String;", null, null);
+        MethodNode g = new MethodNode(ACC_PUBLIC | ACC_FINAL, "getReasoningEffort", "()Ljava/lang/String;", null, null);
+        g.instructions.add(new VarInsnNode(ALOAD, 0));
+        g.instructions.add(new FieldInsnNode(GETFIELD, PMETA, "reasoningEffort", "Ljava/lang/String;"));
+        g.instructions.add(new InsnNode(ARETURN));
+        cn.methods.add(g);
+        MethodNode s = new MethodNode(ACC_PUBLIC | ACC_FINAL, "setReasoningEffort", "(Ljava/lang/String;)V", null, null);
+        s.instructions.add(new VarInsnNode(ALOAD, 0));
+        s.instructions.add(new VarInsnNode(ALOAD, 1));
+        s.instructions.add(new FieldInsnNode(PUTFIELD, PMETA, "reasoningEffort", "Ljava/lang/String;"));
+        s.instructions.add(new InsnNode(RETURN));
+        cn.methods.add(s);
+
+        MethodNode w = findMethod(cn, "write$Self$aiplugin_v2_agent_sdk", null);
+        AbstractInsnNode ret = w.instructions.getLast();
+        while (ret != null && ret.getOpcode() != RETURN) ret = ret.getPrevious();
+        if (ret == null) throw new IllegalStateException("no RETURN at end of write$Self");
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, 0));
+        l.add(new VarInsnNode(ALOAD, 1));
+        l.add(new VarInsnNode(ALOAD, 2));
+        l.add(new MethodInsnNode(INVOKESTATIC, STORE, "encodeElement",
+                "(L" + PMETA + ";L" + KX_ENCODER + ";L" + KX_DESC + ";)V", false));
+        w.instructions.insertBefore(ret, l);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, PMETA, cw.toByteArray());
+        System.out.println("patched " + PMETA);
+    }
+
+    // 元素 12 的解码 + seen0 置位 4096（存入局部变量 23）。
+    // 注意 decodeElement 只需 (input, desc) 两参，索引 12 在其内部。
+    static AbstractInsnNode prevReal(AbstractInsnNode n) {
+        while (n != null && (n instanceof LineNumberNode || n instanceof FrameNode)) n = n.getPrevious();
+        return n;
+    }
+
+    static InsnList decode12WithSeen() {
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, 21));
+        l.add(new VarInsnNode(ALOAD, 2));
+        l.add(new MethodInsnNode(INVOKESTATIC, STORE, "decodeElement",
+                "(L" + KX_DECODER + ";L" + KX_DESC + ";)Ljava/lang/String;", false));
+        l.add(new VarInsnNode(ASTORE, 23));
+        l.add(new VarInsnNode(ILOAD, 5));
+        l.add(new IntInsnNode(SIPUSH, 4096));
+        l.add(new InsnNode(IOR));
+        l.add(new VarInsnNode(ISTORE, 5));
+        return l;
+    }
+
+    // PersistedMetadata$$serializer：
+    //  - <clinit>：descriptor 容量 12->13，追加 addElement("reasoningEffort", true)
+    //  - childSerializers()：数组 12->13
+    //  - deserialize：开头初始化局部 23；顺序路径与 tableswitch 各加元素 12 读取；
+    //    末尾构造后回填字段并调 ThinkingEffortStore.onLoaded
+    static void patchMetadataSerializer(String inDir, String outDir, String classpath) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, PMETA_SER)).accept(cn, 0);
+
+        MethodNode cl = findMethod(cn, "<clinit>", null);
+        AbstractInsnNode dgInit = findInvoke(cl, KX_PLUGIN_DESC, "<init>",
+                "(Ljava/lang/String;Lkotlinx/serialization/internal/GeneratedSerializer;I)V");
+        AbstractInsnNode cap = prevReal(dgInit.getPrevious());
+        if (cap == null || cap.getOpcode() != BIPUSH || ((IntInsnNode) cap).operand != 12) {
+            throw new IllegalStateException("expected bipush 12 before PluginGeneratedSerialDescriptor.<init>");
+        }
+        ((IntInsnNode) cap).operand = 13;
+        AbstractInsnNode put = null;
+        for (AbstractInsnNode n = cl.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == PUTSTATIC && ((FieldInsnNode) n).owner.equals(PMETA_SER)
+                    && ((FieldInsnNode) n).name.equals("descriptor")) {
+                put = n;
+                break;
+            }
+        }
+        if (put == null) throw new IllegalStateException("descriptor putstatic not found in <clinit>");
+        AbstractInsnNode cc = prevReal(put.getPrevious());
+        if (cc == null || cc.getOpcode() != CHECKCAST) throw new IllegalStateException("unexpected clinit tail");
+        InsnList addEl = new InsnList();
+        addEl.add(new VarInsnNode(ALOAD, 0));
+        addEl.add(new LdcInsnNode("reasoningEffort"));
+        addEl.add(new InsnNode(ICONST_1));
+        addEl.add(new MethodInsnNode(INVOKEVIRTUAL, KX_PLUGIN_DESC, "addElement", "(Ljava/lang/String;Z)V", false));
+        cl.instructions.insertBefore(cc, addEl);
+
+        MethodNode cs = findMethod(cn, "childSerializers", null);
+        boolean sized = false;
+        for (AbstractInsnNode n = cs.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == ANEWARRAY && ((TypeInsnNode) n).desc.equals("kotlinx/serialization/KSerializer")) {
+                AbstractInsnNode push = prevReal(n.getPrevious());
+                if (push != null && push.getOpcode() == BIPUSH && ((IntInsnNode) push).operand == 12) {
+                    ((IntInsnNode) push).operand = 13;
+                    sized = true;
+                    break;
+                }
+            }
+        }
+        if (!sized) throw new IllegalStateException("childSerializers array size not found");
+
+        MethodNode d = findMethod(cn, "deserialize", null);
+
+        AbstractInsnNode begin = findInvoke(d, "kotlinx/serialization/encoding/Decoder", "beginStructure",
+                "(L" + KX_DESC + ";)L" + KX_DECODER + ";");
+        AbstractInsnNode p = prevReal(begin.getPrevious());
+        if (p == null || p.getOpcode() != ALOAD || ((VarInsnNode) p).var != 2) {
+            throw new IllegalStateException("unexpected beginStructure context");
+        }
+        p = prevReal(p.getPrevious());
+        if (p == null || p.getOpcode() != ALOAD || ((VarInsnNode) p).var != 1) {
+            throw new IllegalStateException("unexpected beginStructure context");
+        }
+        p = prevReal(p.getPrevious());
+        if (p == null || p.getOpcode() != ASTORE || ((VarInsnNode) p).var != 20) {
+            throw new IllegalStateException("unexpected beginStructure context");
+        }
+        InsnList init = new InsnList();
+        init.add(new InsnNode(ACONST_NULL));
+        init.add(new VarInsnNode(ASTORE, 23));
+        d.instructions.insert(p, init);
+
+        AbstractInsnNode endStruct = findInvoke(d, KX_DECODER, "endStructure", "(L" + KX_DESC + ";)V");
+        AbstractInsnNode arg1 = prevReal(endStruct.getPrevious());
+        if (arg1 == null || arg1.getOpcode() != ALOAD) {
+            throw new IllegalStateException("unexpected endStructure context");
+        }
+        AbstractInsnNode arg0 = prevReal(arg1.getPrevious());
+        if (arg0 == null || arg0.getOpcode() != ALOAD) {
+            throw new IllegalStateException("unexpected endStructure context");
+        }
+        LabelNode tailLabel = null;
+        for (AbstractInsnNode n = arg0.getPrevious(); n != null; n = n.getPrevious()) {
+            if (n instanceof LabelNode) {
+                tailLabel = (LabelNode) n;
+                break;
+            }
+            if (!(n instanceof LineNumberNode) && !(n instanceof FrameNode)) break;
+        }
+        if (tailLabel == null) throw new IllegalStateException("tail label not found");
+
+        JumpInsnNode seqGoto = null;
+        for (AbstractInsnNode n = d.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == GOTO && ((JumpInsnNode) n).label == tailLabel) {
+                seqGoto = (JumpInsnNode) n;
+                break;
+            }
+        }
+        if (seqGoto == null) throw new IllegalStateException("sequential goto tail not found");
+        d.instructions.insertBefore(seqGoto, decode12WithSeen());
+
+        TableSwitchInsnNode table = null;
+        for (AbstractInsnNode n = d.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n instanceof TableSwitchInsnNode) {
+                table = (TableSwitchInsnNode) n;
+                break;
+            }
+        }
+        if (table == null) throw new IllegalStateException("tableswitch not found");
+        LabelNode loopHead = null;
+        for (AbstractInsnNode n = d.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == GOTO) {
+                LabelNode lab = ((JumpInsnNode) n).label;
+                AbstractInsnNode t = lab.getNext();
+                while (t != null && (t instanceof LineNumberNode || t instanceof FrameNode)) t = t.getNext();
+                if (t != null && t.getOpcode() == ILOAD && ((VarInsnNode) t).var == 3) {
+                    loopHead = lab;
+                    break;
+                }
+            }
+        }
+        if (loopHead == null) throw new IllegalStateException("loop head label not found");
+        AbstractInsnNode unk = null;
+        for (AbstractInsnNode n = table; n != null; n = n.getNext()) {
+            if (n.getOpcode() == NEW && ((TypeInsnNode) n).desc.equals("kotlinx/serialization/UnknownFieldException")) {
+                unk = n;
+                break;
+            }
+        }
+        if (unk == null) throw new IllegalStateException("UnknownFieldException handler not found");
+        LabelNode case12 = new LabelNode();
+        InsnList c12 = new InsnList();
+        c12.add(case12);
+        c12.add(decode12WithSeen());
+        c12.add(new JumpInsnNode(GOTO, loopHead));
+        // 插到 default 标签之前：default 分支仍直达 UnknownFieldException，case12 仅经 switch 进入
+        d.instructions.insertBefore(table.dflt, c12);
+        if (table.max != 11) throw new IllegalStateException("unexpected tableswitch max " + table.max);
+        table.max = 12;
+        table.labels.add(case12);
+
+        AbstractInsnNode ctor = null;
+        for (AbstractInsnNode n = d.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == INVOKESPECIAL && ((MethodInsnNode) n).owner.equals(PMETA)
+                    && ((MethodInsnNode) n).name.equals("<init>")
+                    && ((MethodInsnNode) n).desc.endsWith("Lkotlinx/serialization/internal/SerializationConstructorMarker;)V")) {
+                ctor = n;
+                break;
+            }
+        }
+        if (ctor == null) throw new IllegalStateException("serialization ctor not found");
+        InsnList tail = new InsnList();
+        tail.add(new InsnNode(DUP));
+        tail.add(new VarInsnNode(ALOAD, 23));
+        tail.add(new MethodInsnNode(INVOKEVIRTUAL, PMETA, "setReasoningEffort", "(Ljava/lang/String;)V", false));
+        tail.add(new VarInsnNode(ALOAD, 7));
+        tail.add(new VarInsnNode(ALOAD, 23));
+        tail.add(new MethodInsnNode(INVOKESTATIC, STORE, "onLoaded", "(Ljava/lang/String;Ljava/lang/String;)V", false));
+        d.instructions.insert(ctor, tail);
+
+        ClassWriter cw = framesWriter(classpath);
+        cn.accept(cw);
+        writeClass(out, PMETA_SER, cw.toByteArray());
+        System.out.println("patched " + PMETA_SER);
+    }
+
+    // TopLevelConversation/DefaultConversation.prepareMetadata：
+    // 构造 PersistedMetadata 后 dup + ThinkingEffortStore.applyTo 回填 reasoningEffort。
+    static void patchPrepareMetadata(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        for (String cls : new String[]{TLC, DC}) {
+            ClassNode cn = new ClassNode();
+            new ClassReader(readClass(in, cls)).accept(cn, 0);
+            MethodNode m = findMethod(cn, "prepareMetadata", null);
+            AbstractInsnNode ctor = null;
+            for (AbstractInsnNode n = m.instructions.getFirst(); n != null; n = n.getNext()) {
+                if (n.getOpcode() == INVOKESPECIAL && ((MethodInsnNode) n).owner.equals(PMETA)
+                        && ((MethodInsnNode) n).name.equals("<init>")) {
+                    ctor = n;
+                    break;
+                }
+            }
+            if (ctor == null) throw new IllegalStateException("PersistedMetadata ctor not found in prepareMetadata of " + cls);
+            InsnList l = new InsnList();
+            l.add(new InsnNode(DUP));
+            l.add(new MethodInsnNode(INVOKESTATIC, STORE, "applyTo", "(L" + PMETA + ";)V", false));
+            m.instructions.insert(ctor, l);
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            cn.accept(cw);
+            writeClass(out, cls, cw.toByteArray());
+            System.out.println("patched " + cls);
+        }
+    }
+
+    // ActiveConversationOrchestrator.selectConversation：入口通知 ThinkingEffortStore 刷新。
+    static void patchOrchestrator(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, ORCH)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "selectConversation", null);
+        AbstractInsnNode check = findInvoke(m, "kotlin/jvm/internal/Intrinsics", "checkNotNullParameter",
+                "(Ljava/lang/Object;Ljava/lang/String;)V");
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, 1));
+        l.add(new MethodInsnNode(INVOKESTATIC, STORE, "onConversationSelection",
+                "(Lcom/google/studiobot/controller/ConversationSelection;)V", false));
+        m.instructions.insert(check, l);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, ORCH, cw.toByteArray());
+        System.out.println("patched " + ORCH);
+    }
+
+    // TrajectoryTimelineController.handleEvent：ConversationPresented 分支
+    // （clearStatus 调用之后）追加 ThinkingEffortStore.onConversationPresented，
+    // 覆盖 IDE 重启后首个会话的下拉同步（初始选择不经 selectConversation）。
+    static void patchTimelineController(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, TTC)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "handleEvent", null);
+        AbstractInsnNode clear = findInvoke(m, "com/google/studiobot/controller/ConversationStatusCheckinService",
+                "clearStatus", "(Ljava/lang/String;)V");
+        InsnList l = new InsnList();
+        l.add(new VarInsnNode(ALOAD, 1));
+        l.add(new TypeInsnNode(CHECKCAST, EVENT_PRESENTED));
+        l.add(new MethodInsnNode(INVOKEVIRTUAL, EVENT_PRESENTED, "getConversationId", "()Ljava/lang/String;", false));
+        l.add(new MethodInsnNode(INVOKESTATIC, STORE, "onConversationPresented", "(Ljava/lang/String;)V", false));
+        m.instructions.insert(clear, l);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, TTC, cw.toByteArray());
+        System.out.println("patched " + TTC);
     }
 }
