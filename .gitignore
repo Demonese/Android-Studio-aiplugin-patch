@@ -1,3 +1,16 @@
 /dist/
 /tools/
 /work/
+
+# 构建残留/临时文件
+*.class
+*.part
+*.orig
+*.rej
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
