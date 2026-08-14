@@ -1,0 +1,3 @@
+# 所有文本文件统一 LF：防止 core.autocrlf=true 时
+# checkout / git archive 产出 CRLF，破坏 shell 脚本 shebang
+* text=auto eol=lf

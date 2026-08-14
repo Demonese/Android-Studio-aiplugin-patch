@@ -2,6 +2,9 @@
 /tools/
 /work/
 
+# Android Studio 发行包 zip（体积大，不入 git；放到项目目录即可）
+/Android Studio.zip
+
 # 构建残留/临时文件
 *.class
 *.part

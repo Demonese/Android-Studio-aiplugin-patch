@@ -22,6 +22,7 @@ Android Studio 的 AI 功能对 OpenAI 兼容 provider **默认先调 Responses 
 aiplugin-patch/
 ├── README.md
 ├── config.env                 # 路径/版本配置
+├── Android Studio.zip         # Android Studio 发行包（自备，不入 git，见 .gitignore）
 ├── scripts/
 │   ├── 00_setup_tools.sh      # 下载/校验工具 jar（CFR + ASM，SHA-1 校验，支持镜像）
 │   ├── 10_extract_jars.sh     # 从 Android Studio.zip 提取 jar/class
@@ -52,7 +53,7 @@ aiplugin-patch/
 ```bash
 cd aiplugin-patch
 ./scripts/00_setup_tools.sh     # 下载工具 jar（CFR/ASM，Maven Central + SHA-1 校验）
-./scripts/10_extract_jars.sh    # 从 ../"Android Studio.zip" 提取依赖
+./scripts/10_extract_jars.sh    # 从项目目录下的 "Android Studio.zip" 提取依赖
 ./scripts/30_build_patch.sh     # 构建 dist/aiplugin-patched.jar
 ./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 行为测试 + 类加载）
 ```
@@ -94,7 +95,8 @@ cd aiplugin-patch
 
 - Linux + JDK 21（`sudo apt-get install openjdk-21-jdk-headless`）
 - `unzip`、`curl`、网络（首次下载 CFR/ASM）
-- Android Studio 发行包 zip（路径在 `config.env` 中配置，默认 `../Android Studio.zip`）
+- Android Studio 发行包 zip：**放到项目目录根下**（默认 `./Android Studio.zip`）；
+  如放在别处，用环境变量覆盖：`AS_ZIP=/path/to/"Android Studio.zip" ./scripts/10_extract_jars.sh`
 
 ## 技术说明
 
