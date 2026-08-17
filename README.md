@@ -12,28 +12,23 @@ Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该�
 
 ## 背景
 
-Android Studio 的 AI 功能对 OpenAI 兼容 provider **默认先调 Responses API（`/v1/responses`），
-失败（任意 400/404）后自动且不可逆地 fallback 到 Chat Completions API**，没有任何 UI 开关，
-导致部分 OpenAI 兼容服务端上聊天直接报错卡死（详见 `docs/analysis.md`）。
+我刚体验 Android Studio 的 AI 功能，就发现了几个问题：
 
-本项目：在 **Model Providers 设置界面新增 "OpenAI API protocol:" 下拉框**
-（仅 OpenAI-compatible 时可见），选项 `Auto / OpenAI Chat Completions API / OpenAI Responses API`，
-持久化到 provider 配置，并**让该选项实际控制 API 调用**：
-固定为某一协议时不再做 Responses→Completions 的自动回退。
-此外修复思考模式（DeepSeek/Qwen 等）多轮对话的思考内容回传问题：
-- Responses API：部分轮次无思考块导致
-  `400: The reasoning_text in the thinking mode must be passed back to the API`，
-  对缺失思考的 assistant 轮次自动补占位思考内容；
-- Chat Completions API：原实现丢弃 assistant 消息的思考内容，
-  现将已收到的 thought 作为 `reasoning_content` 附加字段回传，
-  避免 `400: The reasoning_content in the thinking mode must be passed back to the API`；
-- Chat Completions API 系统消息 role：原实现在 `useSystemMessage=false`
-  （agent 主路径硬编码）时发送 `developer` role，众多第三方兼容供应商不认而报 400，
-  现恒用 `system` role（OpenAI 官方仍兼容）；
-- 思考强度：Agent 发送区模型选择与 Submit 之间新增下拉（none/minimal/low/medium/high/xhigh/max，
-  样式复用模型选择器），选择按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort`
-  字段（旧对话缺省 medium）；并接入请求参数——Chat Completions 发 `reasoning_effort`、
-  Responses 发 `reasoning.effort`（供应商不接受时沿用原生自适应回退）。
+1. Model Providers 设置界面没法配置固定使用 OpenAI Responses API 还是 OpenAI Chat Completions API，OpenAI 兼容 API 默认先调用 Responses API，遇到任意 400/404 错误后会自动且不可逆地静默回退到 Chat Completions API，没有任何 UI 提示和开关，导致部分大模型供应商无法正常使用（例如：`docs/analysis.md`）。
+2. Chat Completions API 默认用 developer 角色传递系统提示词且没有提供 UI 开关，导致各种大模型供应商（比如阿里云百炼、深度求索）的 API 请求报错 400。
+3. Chat Completions API 不回传思考过程，导致大模型执行任务时智商降低。（虽然这不能完全怪谷歌，但不做兼容就是谷歌的锅）
+4. OpenAI Responses API 和 OpenAI Chat Completions API 都没有传递思考强度（`reasoning_effort`/`reasoning.effort`），UI 也不提供思考强度调整，功能残缺。
+
+本项目借助 AI 神力解决了以上问题：
+
+1. 在 Model Providers 设置界面新增 OpenAI API protocol 下拉选择（仅 OpenAI-compatible 时可见），选项 `Auto / OpenAI Chat Completions API / OpenAI Responses API`，持久化到 provider 配置，并让该选项实际控制 API 调用，固定为某一协议时不再执行自动回退。
+2. Chat Completions API 系统消息 role：原实现在 `useSystemMessage=false`（agent 主路径硬编码）时发送 `developer` role，现在改成固定发送 `system` role，反正 OpenAI 官方仍然兼容。
+3. Chat Completions API：原实现不回传 assistant 消息的思考内容，现将已收到的 `thought` 用 `reasoning_content` 附加字段回传。（TODO：提供字段名设置界面，因为有些供应商不是这个字段）
+4. 思考强度：Agent 发送区模型选择与 Submit 之间新增思考强度选择，样式复用模型选择，挡位有 `none/minimal/low/medium/high/xhigh/max` 与 OpenAI 官方一致，按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort` 字段（旧对话默认 `medium`），并接入请求参数（供应商不接受时沿用原生自适应回退）。
+
+此外还有针对吃白饭的大肥鱼 DeepSeek 的修复：
+
+1. Responses API：部分轮次调用 API 时跳过思考直接调用工具，导致下次再调用 API 时报错 `400: The reasoning_text in the thinking mode must be passed back to the API`，该补丁对缺失思考的 assistant 消息自动补充默认思考内容“继续调用工具……”。
 
 ## 目录结构
 
@@ -134,3 +129,7 @@ Model Providers 设置界面：
 Deepseek V4 Pro 修复：
 
 ![Deepseek V4 Pro 修复](docs/deepseek-v4-pro-fix.jpg)
+
+思考强度下拉选择：
+
+![思考强度下拉选择](docs/reasoning-effort-picker.jpg)
