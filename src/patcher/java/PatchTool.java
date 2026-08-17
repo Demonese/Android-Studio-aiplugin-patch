@@ -413,6 +413,42 @@ public class PatchTool {
                 "(Ljava/util/List;L" + CHAT_MESSAGE + ";Ljava/lang/String;Ljava/util/concurrent/atomic/AtomicInteger;)V", false));
         m.instructions.insertBefore(aloadMsg, l);
 
+        // reasoning.effort：原逻辑仅当 thinkingConfig.thinkingLevel!=null 时发 reasoning，
+        // 而 defaultForAgent 的 level 恒为 null → Responses 从不带 reasoning。
+        // 在方法末尾 return paramsBuilder.build() 之前无条件覆写：
+        // paramsBuilder.reasoning(Reasoning.builder().effort(ThinkingEffortStore.toOpenAiReasoningEffort()).build())
+        // Builder 的 reasoning() 后写覆盖先写；includeThoughts=false 分支的 NONE 也被会话档位覆盖
+        // （监督子请求与主请求同模型同档位，供应商不接受时由协议/参数自适应回退兜底）。
+        MethodNode cp = findMethod(cn, "createParams", null);
+        AbstractInsnNode ret = null;
+        for (AbstractInsnNode n = cp.instructions.getLast(); n != null; n = n.getPrevious()) {
+            if (n.getOpcode() == ARETURN) {
+                ret = n;
+                break;
+            }
+        }
+        AbstractInsnNode buildCall = ret.getPrevious();
+        AbstractInsnNode loadBuilder = buildCall.getPrevious();
+        if (buildCall.getOpcode() != INVOKEVIRTUAL || loadBuilder.getOpcode() != ALOAD) {
+            throw new IllegalStateException("expected paramsBuilder.build() before areturn in createParams");
+        }
+        InsnList rl = new InsnList();
+        rl.add(new VarInsnNode(ALOAD, ((VarInsnNode) loadBuilder).var));
+        rl.add(new FieldInsnNode(GETSTATIC, "com/openai/models/Reasoning", "Companion",
+                "Lcom/openai/models/Reasoning$Companion;"));
+        rl.add(new MethodInsnNode(INVOKEVIRTUAL, "com/openai/models/Reasoning$Companion", "builder",
+                "()Lcom/openai/models/Reasoning$Builder;", false));
+        rl.add(new MethodInsnNode(INVOKESTATIC, STORE, "toOpenAiReasoningEffort",
+                "()Lcom/openai/models/ReasoningEffort;", false));
+        rl.add(new MethodInsnNode(INVOKEVIRTUAL, "com/openai/models/Reasoning$Builder", "effort",
+                "(Lcom/openai/models/ReasoningEffort;)Lcom/openai/models/Reasoning$Builder;", false));
+        rl.add(new MethodInsnNode(INVOKEVIRTUAL, "com/openai/models/Reasoning$Builder", "build",
+                "()Lcom/openai/models/Reasoning;", false));
+        rl.add(new MethodInsnNode(INVOKEVIRTUAL, "com/openai/models/responses/ResponseCreateParams$Builder",
+                "reasoning", "(Lcom/openai/models/Reasoning;)Lcom/openai/models/responses/ResponseCreateParams$Builder;", false));
+        rl.add(new InsnNode(POP));
+        cp.instructions.insertBefore(loadBuilder, rl);
+
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         writeClass(out, RESPONSES_V2, cw.toByteArray());
@@ -453,6 +489,29 @@ public class PatchTool {
                 "(Ljava/lang/String;)L" + CC_PARAMS_BUILDER + ";");
         cp.instructions.set(devCall, new MethodInsnNode(INVOKEVIRTUAL, CC_PARAMS_BUILDER, "addSystemMessage",
                 "(Ljava/lang/String;)L" + CC_PARAMS_BUILDER + ";", false));
+
+        // reasoning_effort：原逻辑 INSTANCE.toReasoningEffort(thinkingConfig.getThinkingLevel())
+        // 只能表达 ThinkingLevel 的 low/medium/high（defaultForAgent 的 level 恒为 null → 固定 MEDIUM）。
+        // 替换为 ThinkingEffortStore.toOpenAiReasoningEffort()（会话级下拉，7 档全保真）。
+        // 原守卫（thinkingConfig!=null && includeThoughts==true && !omitReasoningEffort）不变，
+        // supportReasoningEffort 自适应回退仍然有效。
+        // 字节码序列 getstatic INSTANCE / aload level / getThinkingLevel / invokespecial toReasoningEffort
+        // 整体替换为一条 INVOKESTATIC：栈上仅 [builder]，进出栈深度一致。
+        AbstractInsnNode toRe = findInvoke(cp, COMPLETION_V2, "toReasoningEffort",
+                "(Lcom/google/studiobot/datamodel/models/ThinkingLevel;)Lcom/openai/models/ReasoningEffort;");
+        AbstractInsnNode getLevel = toRe.getPrevious();
+        AbstractInsnNode loadLevel = getLevel.getPrevious();
+        AbstractInsnNode getInstance = loadLevel.getPrevious();
+        if (getLevel.getOpcode() != INVOKEVIRTUAL || loadLevel.getOpcode() != ALOAD
+                || getInstance.getOpcode() != GETSTATIC) {
+            throw new IllegalStateException("unexpected sequence before toReasoningEffort in createParams");
+        }
+        cp.instructions.insertBefore(getInstance, new MethodInsnNode(INVOKESTATIC, STORE,
+                "toOpenAiReasoningEffort", "()Lcom/openai/models/ReasoningEffort;", false));
+        cp.instructions.remove(getInstance);
+        cp.instructions.remove(loadLevel);
+        cp.instructions.remove(getLevel);
+        cp.instructions.remove(toRe);
 
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);

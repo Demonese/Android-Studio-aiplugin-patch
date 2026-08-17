@@ -32,7 +32,8 @@ Android Studio 的 AI 功能对 OpenAI 兼容 provider **默认先调 Responses 
   现恒用 `system` role（OpenAI 官方仍兼容）；
 - 思考强度：Agent 发送区模型选择与 Submit 之间新增下拉（none/minimal/low/medium/high/xhigh/max，
   样式复用模型选择器），选择按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort`
-  字段（旧对话缺省 medium）；目前仅 UI+持久化，尚未接入请求参数。
+  字段（旧对话缺省 medium）；并接入请求参数——Chat Completions 发 `reasoning_effort`、
+  Responses 发 `reasoning.effort`（供应商不接受时沿用原生自适应回退）。
 
 ## 目录结构
 

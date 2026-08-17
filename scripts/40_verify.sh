@@ -7,7 +7,8 @@
 #   5) CompletionReasoningTest：Chat Completions 请求回传 reasoning_content
 #   6) ThinkingEffortPickerTest：思考强度下拉状态与事件
 #   7) ReasoningEffortPersistTest：reasoningEffort 序列化往返与 Store 行为
-#   8) UiLoadTest：新增 UI 类加载
+#   8) ReasoningEffortApiTest：两个 createParams 按会话档位发 reasoning_effort/reasoning.effort
+#   9) UiLoadTest：新增 UI 类加载
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -23,7 +24,7 @@ PLIB="$(plugin_lib_cp)"
 TESTOUT="$WORK/test-out"
 mkdir -p "$TESTOUT"
 
-echo "[1/8] 字节码校验 (CheckClassAdapter) ..."
+echo "[1/9] 字节码校验 (CheckClassAdapter) ..."
 for c in \
   "com.android.studio.ml.modelproviders.data.ProviderData\$RemoteProviderData" \
   "com.android.studio.ml.backends.settings.RemoteModelProviderInfoPanel" \
@@ -44,38 +45,43 @@ for c in \
   echo "    ok: $c"
 done
 
-echo "[2/8] 序列化往返测试 ..."
+echo "[2/9] 序列化往返测试 ..."
 RT_CP="$DIST_JAR:$FULL:$PLIB:$KOTLIN_STDLIB"
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/SerializeTest.java"
 java -cp "$RT_CP:$TESTOUT" SerializeTest | grep -E "serialized|restored|default|copy|ok:|info:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" SerializeTest | grep -q ALL_OK || { echo "[!] SerializeTest 失败"; exit 1; }
 
-echo "[3/8] 协议选择与回退控制测试 ..."
+echo "[3/9] 协议选择与回退控制测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ApiProtocolTest.java"
 java -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -q ALL_OK || { echo "[!] ApiProtocolTest 失败"; exit 1; }
 
-echo "[4/8] Responses 思考回退补全测试 ..."
+echo "[4/9] Responses 思考回退补全测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ResponsesReasoningTest.java"
 java -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -q ALL_OK || { echo "[!] ResponsesReasoningTest 失败"; exit 1; }
 
-echo "[5/8] Chat Completions reasoning_content 回传测试 ..."
+echo "[5/9] Chat Completions reasoning_content 回传测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/CompletionReasoningTest.java"
 java -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -q ALL_OK || { echo "[!] CompletionReasoningTest 失败"; exit 1; }
 
-echo "[6/8] 思考强度下拉测试 ..."
+echo "[6/9] 思考强度下拉测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ThinkingEffortPickerTest.java"
 java -cp "$RT_CP:$TESTOUT" ThinkingEffortPickerTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ThinkingEffortPickerTest | grep -q ALL_OK || { echo "[!] ThinkingEffortPickerTest 失败"; exit 1; }
 
-echo "[7/8] reasoningEffort 持久化测试 ..."
+echo "[7/9] reasoningEffort 持久化测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ReasoningEffortPersistTest.java"
 java -cp "$RT_CP:$TESTOUT" ReasoningEffortPersistTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ReasoningEffortPersistTest | grep -q ALL_OK || { echo "[!] ReasoningEffortPersistTest 失败"; exit 1; }
 
-echo "[8/8] UI 类加载测试 ..."
+echo "[8/9] reasoning_effort/reasoning.effort 接入测试 ..."
+javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ReasoningEffortApiTest.java"
+java -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -E "ok:|FAILED|ALL_OK"
+java -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -q ALL_OK || { echo "[!] ReasoningEffortApiTest 失败"; exit 1; }
+
+echo "[9/9] UI 类加载测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
 java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|fromId|UI_CLASSES_LOAD_OK"
 java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }

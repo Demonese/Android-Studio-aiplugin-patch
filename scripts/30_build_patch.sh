@@ -5,7 +5,8 @@
 #   阶段1  ASM 补丁 RemoteProviderData：加 openAiApiType 字段/@OptionTag/getter/setter，
 #          并在 <init>/copy()/copy(4参)/equals/hashCode 中处理该字段
 #   阶段2  ASM 补丁 OpenAiModelApi/$streamGenerateContent$1/OpenAiModelApiProvider：
-#          按 openAiApiType 选择协议、固定协议时禁用 Responses->Completion 自动回退
+#          按 openAiApiType 选择协议、固定协议时禁用 Responses->Completion 自动回退；
+#          两个 createParams 接入会话级思考强度（reasoning_effort / reasoning.effort）
 #   阶段3  编译新增 Java 源码（依赖阶段1/2产生的 getter/setter）
 #   阶段4  ASM 补丁 RemoteModelProviderInfoPanel：setupUi 加行、update 加载、schema 监听联动
 #   阶段5  ASM 补丁 QueryBoxKt.ActionsRow：模型选择与发送按钮之间插入思考强度下拉
@@ -33,7 +34,7 @@ javac -cp "$ASMC" -d "$WORK/tools-out" "$PROJ/src/patcher/java/PatchTool.java"
 echo "[2/12] 阶段1：补丁 RemoteProviderData（加字段与访问器）..."
 java -cp "$WORK/tools-out:$ASMC" PatchTool data "$WORK/classes-orig" "$PATCHED"
 
-echo "[3/12] 阶段2：补丁 OpenAiModelApi 等（协议选择与回退控制）..."
+echo "[3/12] 阶段2：补丁 OpenAiModelApi 等（协议选择、回退控制、思考强度接入）..."
 java -cp "$WORK/tools-out:$ASMC" PatchTool api "$WORK/classes-orig" "$PATCHED"
 
 echo "[4/12] 阶段3：补丁 PersistedMetadata（reasoningEffort 字段与写出）..."

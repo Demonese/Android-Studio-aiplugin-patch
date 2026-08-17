@@ -309,3 +309,50 @@ medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.jso
 **验证**：`ThinkingEffortPickerTest`（下拉状态与事件）、
 `ReasoningEffortPersistTest`（kotlinx JSON 往返、旧格式解码为 null、
 null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckClassAdapter 通过。
+
+**v6 补充：重启后首个会话的下拉同步**
+- IDE 重启后首个会话的选择不经 `selectConversation`（orchestrator 构造时直接
+  初始化选择流，`LatestOrCreate` 解析后直接 setValue），切换钩子不触发。
+- ASM 补丁 `TrajectoryTimelineController.handleEvent` 的 `ConversationPresented`
+  分支（`clearStatus` 之后）：追加 `ThinkingEffortStore.onConversationPresented`。
+  会话在 UI 呈现必然触发该事件，按 KNOWN 映射同步下拉。
+
+## v7 思考强度接入 OpenAI 请求参数
+
+**目标**：把会话级思考强度档位作为 `reasoning_effort`（Chat Completions）/
+`reasoning.effort`（Responses）发给供应商。
+
+**原生链路（逆向结论）**
+- model：会话持久化 modelId → controller 选出 `ModelApi` →
+  `configureWith(selectedModel, runConfig, GenerationConfig.Companion.defaultForAgent())`
+  → `InvocationContextImpl` → `ModelRequest` → `OpenAiModelApi.streamGenerateContent`
+  （modelId 取自 ModelApi 持有的 ModelConfig）→ 两个 `createParams(modelId, ...)`。
+- 原生 reasoning effort 取自 `modelRequest.generationConfig.thinkingConfig`：
+  - Completion：`includeThoughts==true && !omitReasoningEffort` 时
+    `toReasoningEffort(thinkingLevel)`；ThinkingLevel 仅 low/medium/high，
+    null→MEDIUM。
+  - Responses：仅当 `thinkingLevel!=null` 才发 `reasoning.effort`；
+    `includeThoughts==false` 发 NONE。
+  - `defaultForAgent()` 的 ThinkingConfig 为 `(includeThoughts=true, level=null)`
+    → Completion 恒发 MEDIUM、Responses 从不发。
+- 自适应回退：Completion 收到 REASONING_EFFORT_NOT_SUPPORTED/BAD_REQUEST_OTHER
+  → `supportReasoningEffort=false` 重试（omitReasoningEffort=true）；Responses
+  收到 BAD_REQUEST_OTHER/NOT_FOUND → 回退 Completion 链路。
+
+**补丁方案（与 modelId 同层注入，值来自会话级 Store）**
+- `ThinkingEffortStore.toOpenAiReasoningEffort()`：当前档位 →
+  `com.openai.models.ReasoningEffort`（none/minimal/low/medium/high/xhigh 常量，
+  max 用 `ReasoningEffort.of("max")`）。
+- `OpenAiCompletionApiV2.createParams`：`getstatic INSTANCE / aload level /
+  getThinkingLevel / invokespecial toReasoningEffort` 四指令整体替换为一条
+  `INVOKESTATIC ThinkingEffortStore.toOpenAiReasoningEffort`；原守卫
+  （含 omitReasoningEffort 回退）不变。
+- `OpenAiResponsesApiV2.createParams`：方法末尾 `return paramsBuilder.build()`
+  前无条件覆写 `paramsBuilder.reasoning(Reasoning.builder().effort(...).build())`
+  （Builder 后写覆盖先写；监督子请求 includeThoughts=false 的 NONE 同样被覆盖，
+  供应商不接受时由协议/参数自适应回退兜底）。
+
+**验证**：`ReasoningEffortApiTest` —— 7 档 × 2 协议逐一断言请求参数
+（`ChatCompletionCreateParams.reasoningEffort()` /
+`ResponseCreateParams.reasoning().effort()` 的 `asString()` 等于档位），
+另验证 `omitReasoningEffort=true` 时 Completion 不带该参数。

@@ -2,6 +2,7 @@ package com.google.studiobot.ui.querybox;
 
 import com.google.studiobot.agentsdk.conversations.PersistedMetadata;
 import com.google.studiobot.controller.ConversationSelection;
+import com.openai.models.ReasoningEffort;
 import java.util.concurrent.ConcurrentHashMap;
 import kotlinx.serialization.descriptors.SerialDescriptor;
 import kotlinx.serialization.encoding.CompositeDecoder;
@@ -101,6 +102,19 @@ public final class ThinkingEffortStore {
             }
         }
         metadata.setReasoningEffort(level);
+    }
+
+    // 当前档位映射为 OpenAI SDK 的 ReasoningEffort，供两个 createParams 补丁调用。
+    public static ReasoningEffort toOpenAiReasoningEffort() {
+        switch (activeLevel) {
+            case "none": return ReasoningEffort.NONE;
+            case "minimal": return ReasoningEffort.MINIMAL;
+            case "low": return ReasoningEffort.LOW;
+            case "high": return ReasoningEffort.HIGH;
+            case "xhigh": return ReasoningEffort.XHIGH;
+            case "max": return ReasoningEffort.of("max");
+            default: return ReasoningEffort.MEDIUM;
+        }
     }
 
     // 测试用。
