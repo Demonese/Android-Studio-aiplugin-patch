@@ -43,6 +43,16 @@ public class ReasoningEffortPersistTest {
         String jsonNull = Json.Default.encodeToString(PersistedMetadata.Companion.serializer(), pmNull);
         check(!jsonNull.contains("reasoningEffort"), "null 时不写出字段");
 
+        // —— 端到端：真实补丁 deserialize 尾部调 onLoaded，初始化即读到会话档位 ——
+        ThinkingEffortStore.resetForTest();
+        Json.Default.decodeFromString(PersistedMetadata.Companion.serializer(), json);
+        check("high".equals(ThinkingEffortStore.getActiveLevel()),
+                "反序列化即读到会话档位（初始化）");
+        ThinkingEffortStore.resetForTest();
+        Json.Default.decodeFromString(PersistedMetadata.Companion.serializer(), oldJson);
+        check("medium".equals(ThinkingEffortStore.getActiveLevel()),
+                "旧对话反序列化默认 medium（初始化）");
+
         ThinkingEffortStore.resetForTest();
         ThinkingEffortStore.onConversationSelection(new ConversationSelection.ExistingConversation("conv-1"));
         ThinkingEffortStore.onLoaded("conv-1", "high");

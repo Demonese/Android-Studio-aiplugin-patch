@@ -167,7 +167,8 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    并验证系统消息恒为 `system` role。
 6. `ThinkingEffortPickerTest`：下拉状态与事件。
 7. `ReasoningEffortPersistTest`：kotlinx JSON 往返、旧格式（无字段）解码为 null、
-   null 不写出、Store 加载/选择/保存/新建/旧对话默认。
+   null 不写出、Store 加载/选择/保存/新建/旧对话默认，
+   并以真实补丁字节码端到端断言反序列化即读到会话档位（含旧对话默认 medium）。
 8. `ReasoningEffortApiTest`：7 档 × 2 协议逐一断言 `reasoning_effort` /
    `reasoning.effort` 等于档位；`omitReasoningEffort=true` 时 Completion 不带该参数。
 9. `UiLoadTest`：设置界面与发送区补丁面、布局兼容性 —— 新增类可加载、枚举 id/转换器回退正确、
@@ -341,6 +342,7 @@ medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.jso
 
 **验证**：`ThinkingEffortPickerTest`（下拉状态与事件）、
 `ReasoningEffortPersistTest`（kotlinx JSON 往返、旧格式解码为 null、
+null 不写出、Store 加载/选择/保存/新建/旧对话默认、反序列化即读到档位的端到端断言）
 null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckClassAdapter 通过。
 
 **重启后首个会话的下拉同步**
