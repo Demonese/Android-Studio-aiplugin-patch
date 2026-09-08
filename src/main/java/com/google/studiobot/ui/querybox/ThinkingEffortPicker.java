@@ -64,8 +64,15 @@ public final class ThinkingEffortPicker {
     }
 
     // 由补丁后的 QueryBoxKt.ActionsRow 调用：模型选择与发送按钮之间。
-    // $changed=547（bit0 强制重组 + 参数0/1/2 changed 位），$default=8（modifier 取默认）。
+    // Compose 参数掩码（按本版本 ModelPicker 生成码核实）：
+    //  - $changed：四个参数组分别占 bit1-2 / bit4-5 / bit7-8 / bit10-11，
+    //    每组低位=“已知未变”、高位=“已知已变”；bit0 置位则 callee 的
+    //    shouldExecute(force, …) 中 force 恒真（必执行）。这里只给 bit0，
+    //    参数组位全部留空 → ModelPicker 自己跑 changedInstance() 动态判定，
+    //    不会收到“state 未变”这类谎报信息（原生的透传重调用也用同一形状：
+    //    RecomposeScopeImplKt.updateChangedFlags(x | 1)，对 1 而言结果仍为 1）。
+    //  - $default=8：第 4 个参数（modifier）取默认值，与原生调用点写法一致（callee 用 &8 判）。
     public static void render(Composer composer) {
-        ModelPickerKt.ModelPicker(STATE.getValue(), ON_DISMISS, ON_EVENT, null, composer, 547, 8);
+        ModelPickerKt.ModelPicker(STATE.getValue(), ON_DISMISS, ON_EVENT, null, composer, 1, 8);
     }
 }
