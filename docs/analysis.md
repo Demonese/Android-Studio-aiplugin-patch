@@ -1,13 +1,13 @@
 # Android Studio Gemini 插件逆向分析
 
-> 分析对象：Android Studio (build 261.26222.65) Windows 发行包中的
-> `plugins/gemini/lib/aiplugin.jar`（插件 id `com.google.tools.ij.aiplugin`，Google 闭源，
-> 不在 AOSP `studio-master-dev` 公开源码清单内，只能反编译分析）。
+> 分析对象：Android Studio 2026.1.4（build 261.26222.65.2614.16204760）Windows
+> 发行包中的 `plugins/gemini/lib/aiplugin.jar`（插件 id `com.google.tools.ij.aiplugin`，
+> Google 闭源，不在 AOSP `studio-master-dev` 公开源码清单内，只能反编译分析）。
 > 反编译工具：CFR 0.152。反编译输出可通过 `scripts/20_decompile.sh` 重现。
 
 ## 1. OpenAI 兼容 API 调用与自动 fallback（问题根源）
 
-### V2 路径（当前第三方远程 provider 使用）
+### 当前第三方远程 provider 路径（OpenAI SDK V2）
 
 `com.android.studio.ml.backends.openai.OpenAiModelApi`（源文件 `OpenAiModelApi.kt`，模块 `aiplugin.backends.third-party`）：
 
@@ -46,7 +46,7 @@ public Flow<ModelResponse> streamGenerateContent(ModelRequest req) {
 | 400 | 含 role+developer/system | INVALID_MESSAGE_ROLE |
 | 400 | 含 reasoning_effort+not supported+chat/completions | REASONING_EFFORT_NOT_SUPPORTED |
 | 400 | 其余一切 | **BAD_REQUEST_OTHER** |
-| `NotFoundException`(404) | 含 "model is only supported in v1/responses" 等 | COMPLETION_NOT_SUPPORTED |
+| `NotFoundException`(404) | 含 "model is only supported in v1/responses" 或 "not supported in the v1/chat/completions endpoint" 等 | COMPLETION_NOT_SUPPORTED |
 | 404 | 其余一切 | **NOT_FOUND** |
 
 任何 OpenAI 兼容服务端只要 `/v1/responses` 返回普通 400/404 就会触发切换。
@@ -58,12 +58,6 @@ public Flow<ModelResponse> streamGenerateContent(ModelRequest req) {
 - 一旦置 false，实例存活期间永远走 chat completions；若 chat completions 也失败，
   错误经 `toStatusRuntimeException` 抛出，聊天界面停在报错状态。
 - 只有 provider 状态重建（改 provider 设置 / 刷新模型 / 重启 IDE）才重置为 true。
-
-### V1 路径（旧实现，反向 fallback）
-
-`OpenAiChatImpl.generateContent`：默认走 chat completions，遇到
-`COMPLETION_NOT_SUPPORTED`（404 特定文案）时把 modelId 加入 `responsesApiModels`
-集合改走 Responses API。机制相同，方向相反。
 
 ## 2. Model Providers 设置界面结构
 
@@ -109,7 +103,7 @@ URL Schema 下拉框只选 **协议族**（OpenAI 兼容 vs Anthropic 兼容）�
 
 ## 3. 持久化机制
 
-- `ProviderSettingsConverter`（xmlb `Converter<ProviderSettings>`）：
+- `ProviderSettingsConverter`（`modelproviders/data`，xmlb `Converter<ProviderSettings>`）：
   `toString()` = `XmlSerializer.serialize(value)` → JDOM 字符串；`fromString()` 反之。
 - 即 `RemoteProviderData` 的持久化完全依赖 IntelliJ xmlb 反射序列化：
   字段上的 `@OptionTag(converter=...)` 生效；`@Transient` 排除（如 apiKeyHolder 经 getter 标注）。
@@ -124,12 +118,12 @@ URL Schema 下拉框只选 **协议族**（OpenAI 兼容 vs Anthropic 兼容）�
 </RemoteProviderData>
 ```
 
-- 反序列化经无参构造 `RemoteProviderData()`（委托到 4 参主构造，mask=15），
-  因此**新字段只要在主构造中给默认值即可向后兼容旧配置文件**。
+- 反序列化沿 Kotlin 构造器链（主构造 + `DefaultConstructorMarker` 合成构造器，mask 按位选参），
+  补丁在主构造 return 前给 `openAiApiType` 赋默认 AUTO，因此**旧配置文件无该 option 也兼容**。
 
-### 3.1 isModified / apply / 保存链路（v2 逆向补充）
+### 3.1 isModified / apply / 保存链路
 
-- 存储：`ModelDataStateManagerImpl`（application service）
+- 存储：`ModelDataStateManagerImpl`（`modelproviders/data`，application service）
   `@State(name="ModelDataProviders", storages=@Storage("ai.providers.xml"))`，
   继承 `SimplePersistentStateComponent<ProviderDetailsState>`。
 - `ModelProviderConfigurable.isModified()`：
@@ -155,6 +149,6 @@ URL Schema 下拉框只选 **协议族**（OpenAI 兼容 vs Anthropic 兼容）�
 | `ProviderData$RemoteProviderData$ApiSchema(+Converter)` | 协议族枚举与 xmlb 转换器 |
 | `RemoteModelProviderInfoPanel` | 远程 provider 设置面板（UI DSL） |
 | `RemoteModelProviderSettings` | provider 业务逻辑（fetchModels/apply 等） |
-| `ProviderSettingsConverter` | ProviderSettings ↔ XML |
+| `ProviderSettingsConverter` | ProviderSettings ↔ XML（`modelproviders/data`） |
 | `OpenAiModelApi` / `OpenAiModelApiProvider` | OpenAI 兼容后端（fallback 所在） |
 | `OpenAiUtilsKt.detectErrorType` / `ErrorType` | 错误分类 |

@@ -47,15 +47,20 @@ aiplugin-patch/
 ├── tools/                     # 构建工具 jar（00_setup_tools.sh 下载，勿手改）
 ├── src/
 │   ├── main/java/             # 新增类源码（编译进 jar）
-│   │   └── com/android/studio/ml/
-│   │       ├── modelproviders/data/OpenAiApiType.java
-│   │       ├── modelproviders/data/OpenAiApiTypeConverter.java
-│   │       ├── backends/settings/OpenAiApiTypeUi.java
-│   │       ├── backends/openai/OpenAiApiTypeSupport.java
-│   │       ├── backends/openai/OpenAiResponsesSupport.java
-│   │       └── backends/openai/OpenAiCompletionSupport.java
+│   │   ├── com/android/studio/ml/
+│   │   │   ├── modelproviders/data/OpenAiApiType.java
+│   │   │   ├── modelproviders/data/OpenAiApiTypeConverter.java
+│   │   │   ├── backends/settings/OpenAiApiTypeUi.java
+│   │   │   ├── backends/openai/OpenAiApiTypeSupport.java
+│   │   │   ├── backends/openai/OpenAiResponsesSupport.java
+│   │   │   └── backends/openai/OpenAiCompletionSupport.java
+│   │   └── com/google/studiobot/ui/querybox/
+│   │       ├── ThinkingEffortPicker.java
+│   │       └── ThinkingEffortStore.java
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具
-│   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest / CompletionReasoningTest / UiLoadTest
+│   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest /
+│                              # CompletionReasoningTest / ThinkingEffortPickerTest /
+│                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
 │   └── patch-design.md        # 补丁设计、插入点、后端协议控制
@@ -73,15 +78,15 @@ cd aiplugin-patch
 ./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 行为测试 + 类加载）
 ```
 
-可选：`./scripts/20_decompile.sh` 重新生成反编译源码到 `work/decompiled/`
-（仓库上级目录的 `../aiplugin/` 是同一反编译结果的副本）。
+可选：`./scripts/20_decompile.sh` 重新生成反编译源码到 `work/decompiled/`。
 
 ## 工具下载（tools/）
 
 `tools/` 下的 CFR 与 ASM jar 由 `scripts/00_setup_tools.sh` 从 Maven Central 下载，
 **无需手工放置**：
 
-- 版本在 `config.env`（`CFR_VERSION=0.152`、`ASM_VERSION=9.7.1`）
+- 版本在 `config.env`（`CFR_VERSION=0.152`、`ASM_VERSION=9.10.1`，
+  ASM 9.10.1 支持 aiplugin.jar 的 Java 25 class 文件）
 - 下载先写入 `.part` 临时文件，与 Maven Central 官方 **SHA-1** 校验一致后才落盘，
   损坏/被篡改的文件会自动重新下载
 - `20/30/40` 脚本启动时自动检查工具是否齐全，缺失会自动调用下载流程
@@ -108,8 +113,10 @@ cd aiplugin-patch
 
 ## 环境要求
 
-- Linux + JDK 21（`sudo apt-get install openjdk-21-jdk-headless`）
-- `unzip`、`curl`、网络（首次下载 CFR/ASM）
+- Linux + JDK 25（`sudo apt-get install openjdk-25-jdk-headless`）。
+  aiplugin.jar 的 class 文件版本为 69 = Java 25，ASM 读改写与运行时测试都必须在
+  JDK 25 上进行。新增源码编译到 `--release 21`。
+- `unzip`、`curl`、网络（首次下载 CFR/ASM；ASM 9.10.1 支持 Java 25 class 文件）
 - Android Studio 发行包 zip：**放到项目目录根下**（默认 `./Android Studio.zip`）；
   如放在别处，用环境变量覆盖：`AS_ZIP=/path/to/"Android Studio.zip" ./scripts/10_extract_jars.sh`
 

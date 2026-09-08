@@ -1,4 +1,4 @@
-# 补丁设计：OpenAI API 协议选择（UI + 持久化 + 后端协议控制）
+# 补丁设计（API 协议选择 + 第三方供应商兼容 + 思考强度）
 
 ## 目标
 
@@ -35,7 +35,9 @@
 ├── OpenAiApiTypeUi          UI 辅助：行创建/可见性联动/回写（状态 WeakHashMap 按面板实例保存）
 ├── OpenAiApiTypeSupport     后端决策：resolveUseResponses / allowResponsesFallback
 ├── OpenAiResponsesSupport   Responses 请求构造：缺失思考时补占位 reasoning item
-└── OpenAiCompletionSupport  Chat Completions 请求构造：回传 reasoning_content
+├── OpenAiCompletionSupport  Chat Completions 请求构造：回传 reasoning_content
+├── ThinkingEffortPicker     发送区思考强度下拉（复用 ModelPicker 渲染）
+└── ThinkingEffortStore      思考强度运行时存储 + 持久化钩子 + ReasoningEffort 映射
 
 ASM 补丁（PatchTool.java）
 ├── ProviderData$RemoteProviderData
@@ -44,8 +46,8 @@ ASM 补丁（PatchTool.java）
 │   ├── <init>(4参)：return 前插入 this.openAiApiType = AUTO
 │   ├── copy()：return 前把字段拷给新实例（局部变量1）
 │   ├── copy(4参)：ARETURN 前 dup 新实例并拷入字段
-│   ├── equals(Object)：最终 return-true 路径前插入 openAiApiType 引用比较（v2 修复）
-│   └── hashCode()：末尾插入 result = result*31 + openAiApiType.hashCode()（v2 修复）
+│   ├── equals(Object)：最终 return-true 路径前插入 openAiApiType 引用比较
+│   └── hashCode()：末尾插入 result = result*31 + openAiApiType.hashCode()
 ├── RemoteModelProviderInfoPanel
 │   ├── setupUi：在 LDC "remote.studiobot.settings.apikey.title" 之前
 │   │            插入 OpenAiApiTypeUi.addRow(this, builder)   // 行位于 URL Schema 与 API key 之间
@@ -59,21 +61,29 @@ ASM 补丁（PatchTool.java）
 ├── OpenAiModelApi$streamGenerateContent$1（catch 处理器）
 │   └── invokeSuspend：$useResponsesAPI 的 IFEQ 门之后追加
 │                allowResponsesFallback(this$0) 检查，IFEQ 复用同一 throw 目标
-└── OpenAiModelApiProvider
-    └── computeState：new OpenAiModelApi(...) 后 dup + 从局部变量9
-                 （providerSettings）getOpenAiApiType → setOpenAiApiType
-
-ASM 补丁（v3）
-└── OpenAiResponsesApiV2
-    └── toInputItem(ModelChatMessage,...)：toolCalls 循环汇合点插入
-                 OpenAiResponsesSupport.ensureReasoning（补占位思考）
-
-ASM 补丁（v4）
-└── OpenAiCompletionApiV2
-    ├── toMessageParam(ModelChatMessage)：return ofAssistant(builder.build()) 前、
-    │            aload_2（builder）之前插入
-    │            OpenAiCompletionSupport.attachReasoningContent（回传 reasoning_content）
-    └── createParams：addDeveloperMessage 调用改写为 addSystemMessage（v5）
+├── OpenAiModelApiProvider
+│   └── computeState：new OpenAiModelApi(...) 后 dup + 从局部变量9
+│                 （providerSettings）getOpenAiApiType → setOpenAiApiType
+├── OpenAiResponsesApiV2
+│   ├── toInputItem：toolCalls 循环汇合点插入 ensureReasoning（补占位思考）
+│   └── createParams：末尾覆写 paramsBuilder.reasoning(effort=会话档位)
+├── OpenAiCompletionApiV2
+│   ├── toMessageParam：return ofAssistant(...) 前插入 attachReasoningContent
+│   └── createParams：addDeveloperMessage 改写为 addSystemMessage；
+│                toReasoningEffort 调用替换为 ThinkingEffortStore.toOpenAiReasoningEffort()；
+│                reasoningEffort(NONE) 回退分支门控改为恒跳过
+├── QueryBoxKt.ActionsRow
+│   └── ModelPicker + 8dp Spacer 之后插入 ThinkingEffortPicker.render + 8dp Spacer
+├── PersistedMetadata
+│   ├── + 字段 reasoningEffort（String，可空）+ getter/setter
+│   └── write$Self：末尾调 ThinkingEffortStore.encodeElement（元素 16）
+├── PersistedMetadata$$serializer
+│   └── descriptor 容量 +1 并 addElement("reasoningEffort")；childSerializers +1；
+│        deserialize 顺序路径与 tableswitch 各插元素 16 读取，构造后回填
+├── DefaultConversation.prepareMetadata：构造后 dup + applyTo 回填
+├── ActiveConversationOrchestrator.selectConversation：入口通知 onConversationSelection
+└── TrajectoryTimelineController.handleEvent：ConversationPresented 分支的
+     clearStatus 前插 dup + onConversationPresented（锚定其实参来自 getConversationId）
 ```
 
 ### 设计要点
@@ -81,10 +91,11 @@ ASM 补丁（v4）
 1. **构建顺序**：`OpenAiApiTypeUi` 调用 `RemoteProviderData.get/setOpenAiApiType`，
    `OpenAiApiTypeSupport` 调用 `OpenAiModelApi.getOpenAiApiType`，
    这些方法均由 ASM 阶段添加，因此必须先补丁数据类与 API 类、再编译新源码
-   （见 30_build_patch.sh：data → api → javac → panel → 组装）。
-2. **合成访问器用反射**：面板的 `getCurrentProvider` 是 private，Kotlin 合成的
-   `access$getGetCurrentProvider$p` 为 synthetic，javac 不允许源码直接调用，
-   `OpenAiApiTypeUi` 用缓存的反射 Method 调用它。
+   （见 30_build_patch.sh 的阶段顺序：data → api → metadata → javac →
+   panel → querybox → metaser → convmeta → orch → timeline → 组装）。
+2. **面板私有状态用反射读**：面板的 `getCurrentProvider`（`Function0<ProviderDetails>`）
+   是 private 字段且新版插件不再为其生成 Kotlin synthetic 访问器，`OpenAiApiTypeUi`
+   用缓存的反射 Field 直接读该字段。
 3. **可见性**：新行 `visibleIf(isProviderSettingVisible AND apiTypeVisible)`，
    `apiTypeVisible = (schema == OPENAI)`；schema 变更经既有 afterChange 链实时联动。
 4. **状态管理**：`OpenAiApiTypeUi.STATES` 为 `WeakHashMap<面板, State>`，
@@ -93,11 +104,14 @@ ASM 补丁（v4）
 5. **帧与栈**：绝大多数插入为无分支直线代码；新增分支处（equals 的 IF_ACMPEQ、
    catch 处理器的 IFEQ）均复用已有跳转目标或补 F_SAME 帧；
    使用 `ClassWriter.COMPUTE_MAXS` 重算最大栈。CheckClassAdapter 校验通过。
-6. **向后兼容**：旧配置 XML 无 `openAiApiType` option → 反序列化走无参构造 → 默认 AUTO。
+6. **向后兼容**：旧配置 XML 无 `openAiApiType` option → 反序列化走构造器默认值 AUTO；
+   旧对话 metadata.json 无 `reasoningEffort` → 解码为 null → 默认 medium。
+7. **工具链**：插件 class 文件为 major 69（Java 25），ASM 9.10.1 才能读改写；
+   构建/验证在 JDK 25 上进行；新增源码编译 `--release 21`。
 
-## v2 修复：Apply 按钮不亮 / 设置不持久化
+## Apply 按钮不亮 / 设置不持久化（equals/hashCode 补丁）
 
-**现象**（v1 实测）：只切换 "OpenAI API protocol" 时 Apply 按钮不启用；点 OK 退出重开后设置丢失。
+**现象**：只切换 "OpenAI API protocol" 时 Apply 按钮不启用；点 OK 退出重开后设置丢失。
 
 **根因链**（单一根因）：
 1. `RemoteProviderData` 是 Kotlin data class，自动生成的 `equals()`/`hashCode()` 只覆盖
@@ -115,8 +129,7 @@ ASM 补丁（v4）
   新分支目标补 `F_SAME` 帧（状态与原帧相同）。枚举用引用比较（IF_ACMPEQ），字段恒非 null。
 - hashCode：末尾 `ILOAD 1; IRETURN` 前插入 `result = result*31 + openAiApiType.hashCode()`
   （result 存于局部变量1，无新分支、无帧问题）。
-- 注意 COMPUTE_MAXS 下插入新分支必须自带目标帧；v2 首版因插到原 Label 之前导致原跳转
-  失去帧而 VerifyError，改为插在 Frame 之后解决。
+- COMPUTE_MAXS 下新增分支必须自带目标帧：equals 的新分支目标补 `F_SAME` 帧（状态与原帧相同）。
 
 **验证**：SerializeTest 新增断言 —— 仅 openAiApiType 不同的两实例 `!equals`；
 copy/序列化往返后 equals 成立。CheckClassAdapter 通过。
@@ -139,7 +152,7 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 
 ## 验证（scripts/40_verify.sh）
 
-1. `CheckClassAdapter`：七个被补丁类的字节码合法性（含类型分析）。
+1. `CheckClassAdapter`：13 个被补丁类的字节码合法性（含类型分析）。
 2. `SerializeTest`：真实平台 jar 上运行 `XmlSerializer` 往返：
    序列化出现 `openAiApiType` option；反序列化还原；构造默认 AUTO；
    `copy()` 与 `copy(4参)` 保留字段；equals/hashCode 感知字段。
@@ -149,8 +162,13 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    已有思考/签名不重复注入、其他模型消息不注入。
 5. `CompletionReasoningTest`：真实 `createParams` 验证 thought 非空时 assistant 消息
    附加 `reasoning_content`、tool_calls 保留、thought 为 null/空串时不附加；
-   并验证系统消息恒为 `system` role（v5）。
-6. `UiLoadTest`：新增类可加载、枚举值正确。
+   并验证系统消息恒为 `system` role。
+6. `ThinkingEffortPickerTest`：下拉状态与事件。
+7. `ReasoningEffortPersistTest`：kotlinx JSON 往返、旧格式（无字段）解码为 null、
+   null 不写出、Store 加载/选择/保存/新建/旧对话默认。
+8. `ReasoningEffortApiTest`：7 档 × 2 协议逐一断言 `reasoning_effort` /
+   `reasoning.effort` 等于档位；`omitReasoningEffort=true` 时 Completion 不带该参数。
+9. `UiLoadTest`：新增类可加载、枚举值正确。
 
 ## 安装与测试
 
@@ -162,7 +180,7 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 5. 协议行为：CHAT_COMPLETION → 只发 `/chat/completions` 请求；
    RESPONSE → 只发 `/responses` 请求且失败不回退；AUTO → 原生行为。
 
-## 第 2 阶段实现细节：后端协议控制
+## 后端协议控制：实现细节
 
 ### 原生机制（逆向结论）
 
@@ -193,7 +211,7 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 4. **设置变更生效时机**：`computeState` 由设置通知流驱动重新计算，
    Apply 设置后新的 `OpenAiModelApi` 实例携带新协议值；无需重启 IDE。
 
-## v3 修复：DeepSeek 思考模式 "reasoning_text must be passed back" 400 错误
+## DeepSeek 思考模式 "reasoning_text must be passed back" 400 错误（Responses 占位思考）
 
 **现象**（DeepSeek V4 Flash/Pro 实测）：`Model query failed: 400: The reasoning_text in
 the thinking mode must be passed back to the API.`
@@ -221,7 +239,7 @@ helper 仅在两者皆空且模型匹配时注入 → 不会重复注入。
 无思考+工具调用轮次 → 补 1 个占位思考；有思考轮次 → 保留原文本；
 仅有签名轮次 → 保留签名项不注入；其他模型消息 → 不注入。CheckClassAdapter 通过。
 
-## v4 修复：Chat Completions API 不回传思考内容（reasoning_content）
+## Chat Completions API 不回传思考内容（reasoning_content）
 
 **现象**：DeepSeek/Qwen 思考模式走 Chat Completions 协议多轮对话（含工具调用）时
 报 `400: The reasoning_content in the thinking mode must be passed back to the API.`
@@ -243,14 +261,13 @@ helper 仅在两者皆空且模型匹配时注入 → 不会重复注入。
 方法无 StackMapTable 显式帧，直线调用不改分支、不新增帧。局部变量：0=this、
 1=ModelChatMessage、2=builder。
 
-**与 v3 的区别**：v3 是"缺失时补占位"（Responses 的 reasoning item 结构要求每轮必带）；
-v4 是"已有时回传"（Chat Completions 仅在 thought 非空时附加，不伪造内容）。
+**与 Responses 占位思考补丁的区别**：前者是"缺失时补占位"（Responses 的 reasoning item 结构要求每轮必带）；后者是"已有时回传"（Chat Completions 仅在 thought 非空时附加，不伪造内容）。
 
 **验证**：`CompletionReasoningTest` 用真实 `createParams` 构造含 3 类 assistant 历史
 消息的请求：thought 非空 → `reasoning_content` 等于原思考文本且 tool_calls 保留；
 thought 为 null/空串 → 不附加。CheckClassAdapter 通过。
 
-## v5 修复：Chat Completions 系统消息 developer role 导致第三方供应商 400
+## Chat Completions 系统消息 developer role 导致第三方供应商 400
 
 **现象**：部分 OpenAI 兼容供应商对 `developer` role 返回 400（只认 `system`）。
 
@@ -259,25 +276,21 @@ thought 为 null/空串 → 不附加。CheckClassAdapter 通过。
 - `createParams(useSystemMessage=...)` 参数存在，但唯一调用方 `OpenAiModelApi`
   硬编码传 false → 恒走 `addDeveloperMessage`；
 - JVM 属性 `studio.ml.openai.chat.sendAsSystemMessage=true` 可强制 system，
-  但需改 IDE vmoptions，普通用户不可见；
-- 旧版 chat 路径 `OpenAiChatImpl` 有 `INVALID_MESSAGE_ROLE` 自动重试学习
-  （developer 失败后记住该模型改用 system），agent 主路径没有此机制。
+  但需改 IDE vmoptions，普通用户不可见。
 
 **修复**（ASM，`patchCompletionApi`）：把 `createParams` 中
 `ChatCompletionCreateParams$Builder.addDeveloperMessage` 调用原地改写为
 `addSystemMessage`（描述符相同，三元两个分支殊途同归）。OpenAI 官方仍兼容
 `system` role（`developer` 仅为 2024-12 起的改名），故恒 system 对官方与第三方均安全。
-仅补丁 agent 主路径使用的 `OpenAiCompletionApiV2`；V1 `OpenAiCompletionApi`
-（旧 chat 路径）自带重试学习，不动。
 
 **验证**：`CompletionReasoningTest` 断言 `useSystemMessage=false` 构造出的首条消息
 `isSystem() && !isDeveloper()`。CheckClassAdapter 通过。
 
-## v6 思考强度：UI 下拉 + reasoningEffort 按会话持久化
+## 思考强度：UI 下拉 + reasoningEffort 按会话持久化
 
 **目标**：Agent 发送区模型选择与 Submit 之间加思考强度下拉（none/minimal/low/
 medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.json` 的
-`reasoningEffort` 字段；旧对话缺省 medium。本轮只做 UI+持久化，未接入请求参数。
+`reasoningEffort` 字段；旧对话缺省 medium（请求参数接入见下节）。
 
 **UI（复用模型选择器样式）**
 - 新增 `ThinkingEffortPicker`（`com.google.studiobot.ui.querybox`）：复用
@@ -288,36 +301,42 @@ medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.jso
 
 **持久化（kotlinx.serialization 加字段）**
 - `PersistedMetadata`：加私有字段 `reasoningEffort` + getter/setter；
-  `write$Self` 末尾直线调 `ThinkingEffortStore.encodeElement`（元素 12，
+  `write$Self` 末尾直线调 `ThinkingEffortStore.encodeElement`（元素 16，
   nullable String，非空才写）。
-- `PersistedMetadata$$serializer`：
-  - `<clinit>` descriptor 容量 12→13 + `addElement("reasoningEffort", true)`；
-  - `childSerializers()` 数组 12→13；
-  - `deserialize`：开头初始化局部 23；顺序路径与 tableswitch（max 11→12，
-    新增 case 12）各插入元素 12 读取（seen0 置位 4096）；构造后
-    `setReasoningEffort` 回填并调 `ThinkingEffortStore.onLoaded`。
-  - 因新增分支目标，用 COMPUTE_FRAMES 重算栈映射帧（`framesWriter`
+- `PersistedMetadata$$serializer`（PersistedMetadata 本身有 16 个原生字段）
+  - `<clinit>` descriptor 容量 16+1，追加 `addElement("reasoningEffort", true)`；
+  - `childSerializers()` 数组 16+1，新下标补
+    `getNullable(StringSerializer.INSTANCE)`（数组按元素下标直接索引，
+    新下标处原本为 null 有 NPE 隐患，补全）；
+  - `deserialize`：开头初始化局部 27（CompositeDecoder 在局部 25、
+    descriptor 在局部 2、seen0 在局部 5）；顺序路径与 tableswitch（case 16）
+    各插元素 16 读取（seen0 置位 65536）；构造后 `setReasoningEffort` 回填
+    并调 `ThinkingEffortStore.onLoaded(id, effort)`。
+  - 因新增 switch 分支目标，用 COMPUTE_FRAMES 重算栈映射帧（`framesWriter`
     带 classpath 的 `getCommonSuperClass`）。
-- 两处 `prepareMetadata`（TopLevel/DefaultConversation）：构造后
+  - 各容量/尺寸锚点均“读原值 +1”，不硬编码数字。
+- `DefaultConversation.prepareMetadata`：构造 PersistedMetadata 后
   `dup + ThinkingEffortStore.applyTo` 回填。
 - `ActiveConversationOrchestrator.selectConversation`：入口通知
   `ThinkingEffortStore.onConversationSelection` 切换/新建刷新。
 
 **运行时存储 `ThinkingEffortStore`**：`conversationId -> 档位` 映射 +
-当前会话 ID + 当前档位；加载/切换/选择/保存各钩子；新会话首次保存时绑定 ID。
+当前会话 ID + 当前档位（`ELEMENT_INDEX=16`）；加载/切换/选择/保存各钩子；
+新会话首次保存时绑定 ID。
 
 **验证**：`ThinkingEffortPickerTest`（下拉状态与事件）、
 `ReasoningEffortPersistTest`（kotlinx JSON 往返、旧格式解码为 null、
 null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckClassAdapter 通过。
 
-**v6 补充：重启后首个会话的下拉同步**
+**重启后首个会话的下拉同步**
 - IDE 重启后首个会话的选择不经 `selectConversation`（orchestrator 构造时直接
   初始化选择流，`LatestOrCreate` 解析后直接 setValue），切换钩子不触发。
 - ASM 补丁 `TrajectoryTimelineController.handleEvent` 的 `ConversationPresented`
-  分支（`clearStatus` 之后）：追加 `ThinkingEffortStore.onConversationPresented`。
+  分支：`clearStatus` 调用前插入 `dup + ThinkingEffortStore.onConversationPresented`
+  （锚定实参来自 `ConversationPresented.getConversationId()` 的那个 clearStatus）。
   会话在 UI 呈现必然触发该事件，按 KNOWN 映射同步下拉。
 
-## v7 思考强度接入 OpenAI 请求参数
+## 思考强度接入 OpenAI 请求参数
 
 **目标**：把会话级思考强度档位作为 `reasoning_effort`（Chat Completions）/
 `reasoning.effort`（Responses）发给供应商。
@@ -346,11 +365,14 @@ null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckCla
 - `OpenAiCompletionApiV2.createParams`：`getstatic INSTANCE / aload level /
   getThinkingLevel / invokespecial toReasoningEffort` 四指令整体替换为一条
   `INVOKESTATIC ThinkingEffortStore.toOpenAiReasoningEffort`；原守卫
-  （含 omitReasoningEffort 回退）不变。
+  （含 omitReasoningEffort 回退）不变。另把原生
+  `omitReasoningEffort=true` 时无条件发 `reasoningEffort(NONE)` 的分支门控
+  （`ILOAD omit`）改为 `ICONST_0` 恒跳过——供应商拒绝该参数后的自适应重试
+  不再携带被拒绝的参数；用户下拉选 none 仍经上方替换点显式发 NONE。
 - `OpenAiResponsesApiV2.createParams`：方法末尾 `return paramsBuilder.build()`
   前无条件覆写 `paramsBuilder.reasoning(Reasoning.builder().effort(...).build())`
-  （Builder 后写覆盖先写；监督子请求 includeThoughts=false 的 NONE 同样被覆盖，
-  供应商不接受时由协议/参数自适应回退兜底）。
+  （Builder 后写覆盖先写；监督子请求 includeThoughts=false 的 NONE 同样被覆盖；
+  供应商不接受时：AUTO 模式由协议/参数自适应回退兜底，固定协议时错误直接抛给用户）。
 
 **验证**：`ReasoningEffortApiTest` —— 7 档 × 2 协议逐一断言请求参数
 （`ChatCompletionCreateParams.reasoningEffort()` /
