@@ -956,9 +956,10 @@ public class PatchTool {
         System.out.println("patched " + ORCH);
     }
 
-    // TrajectoryTimelineController.handleEvent：ConversationPresented 分支
-    // （clearStatus 调用之后）追加 ThinkingEffortStore.onConversationPresented，
-    // 覆盖 IDE 重启后首个会话的下拉同步（初始选择不经 selectConversation）。
+    // TrajectoryTimelineController.handleEvent：ConversationPresented 分支的
+    // clearStatus 调用前插 dup + ThinkingEffortStore.onConversationPresented
+    // （复用其 conversationId 实参），覆盖 IDE 重启后首个会话的下拉同步
+    // （初始选择不经 selectConversation）。
     static void patchTimelineController(String inDir, String outDir) throws Exception {
         Path in = Path.of(inDir);
         Path out = Path.of(outDir);

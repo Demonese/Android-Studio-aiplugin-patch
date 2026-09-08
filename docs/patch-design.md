@@ -101,7 +101,9 @@ ASM 补丁（PatchTool.java）
    `apiTypeVisible = (schema == OPENAI)`；schema 变更经既有 afterChange 链实时联动。
 4. **状态管理**：`OpenAiApiTypeUi.STATES` 为 `WeakHashMap<面板, State>`，
    State 持有 `AtomicProperty<OpenAiApiType>`（绑定 combo）与 `AtomicBooleanProperty`（可见性）。
-   `load()` 可能先于 `setupUi()` 发生（update 先调用），State 惰性创建解决时序问题。
+   `load()` 的首次调用发生在 `setupUi()` 之后（`ModelProviderInfoPanel` 先对全部
+   configuration 调 `setupUi` 再调 `update`，此后列表选中变化会重复 `update`），
+   State 惰性创建保证任意调用顺序安全。
 5. **帧与栈**：绝大多数插入为无分支直线代码；新增分支处（equals 的 IF_ACMPEQ、
    catch 处理器的 IFEQ）均复用已有跳转目标或补 F_SAME 帧；
    用 `ClassWriter.COMPUTE_MAXS` 重算最大栈（`PersistedMetadata$$serializer.deserialize`
@@ -179,6 +181,13 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    另断言发送区 `ActionsRow` 布局：思考强度下拉（`ThinkingEffortPicker.render`）位于
    ModelPicker 与 Submit（AnimatedContent）之间、两侧各 8dp 间隙（宽度常量与 Compose
    参数掩码同原生间隙），且 render 内部复用 `ModelPickerKt.ModelPicker` 渲染。
+10. `ApiProtocolUiBehaviorTest`：headless 构造真实 `RemoteModelProviderInfoPanel`，
+    验证 load 读取存储协议 + schema 决定可见性（旧配置 schema=null → 按 OpenAI 显示）、
+    厂商切换显隐实时联动、下拉切换回写 live provider、provider 为 null/非 Remote 时
+    回写静默跳过不抛异常。
+11. `ProviderApiTypePropagationTest`：设置 → `computeState()` → `OpenAiModelApi`
+    实例端到端传播：按 provider 隔离、设置变更后重算生效、AUTO 默认行为不变、
+    固定协议强制分派与禁用回退、旧配置（无协议字段）实例默认 AUTO。
 
 ## 安装与测试
 
@@ -344,8 +353,7 @@ medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.jso
 **验证**：`ThinkingEffortPickerTest`（下拉状态与事件）、
 `ReasoningEffortPersistTest`（kotlinx JSON 往返、旧格式解码为 null、
 null 不写出、Store 加载/选择/保存/新建/旧对话默认、反序列化即读到档位的端到端断言、
-切换→落盘→重启读取→请求映射的完整生命周期回路）
-null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckClassAdapter 通过。
+切换→落盘→重启读取→请求映射的完整生命周期回路）。CheckClassAdapter 通过。
 
 **重启后首个会话的下拉同步**
 - IDE 重启后首个会话的选择不经 `selectConversation`（orchestrator 构造时直接

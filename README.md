@@ -60,7 +60,8 @@ aiplugin-patch/
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具
 │   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest /
 │                              # CompletionReasoningTest / ThinkingEffortPickerTest /
-│                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest
+│                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest /
+│                              # ApiProtocolUiBehaviorTest / ProviderApiTypePropagationTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
 │   └── patch-design.md        # 补丁设计、插入点、后端协议控制

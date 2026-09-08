@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 00_setup_tools.sh — 准备构建工具：JDK 25、CFR 反编译器、ASM 字节码库
+# 00_setup_tools.sh — 检查 JDK、下载校验工具 jar（CFR 反编译器、ASM 字节码库）
 #
 # 用法：
 #   ./scripts/00_setup_tools.sh            # 下载缺失的工具 jar 并做 SHA-1 校验
