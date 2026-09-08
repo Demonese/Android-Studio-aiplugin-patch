@@ -292,8 +292,11 @@ thought 为 null/空串 → 不附加。CheckClassAdapter 通过。
 `addSystemMessage`（描述符相同，三元两个分支殊途同归）。OpenAI 官方仍兼容
 `system` role（`developer` 仅为 2024-12 起的改名），故恒 system 对官方与第三方均安全。
 
-**验证**：`CompletionReasoningTest` 断言 `useSystemMessage=false` 构造出的首条消息
-`isSystem() && !isDeveloper()`。CheckClassAdapter 通过。
+**验证**：`CompletionReasoningTest` 断言三态下首条消息均 `isSystem() && !isDeveloper()`：
+`useSystemMessage=false`（唯一调用方硬编码值，原版此处为 developer，补丁核心变化）、
+`useSystemMessage=true`（原版本就 system，回归保护）、
+JVM 属性 `sendAsSystemMessage=true` + `useSystemMessage=false`
+（原版隐藏开关，测试后还原属性）。CheckClassAdapter 通过。
 
 ## 思考强度：UI 下拉 + reasoningEffort 按会话持久化
 
