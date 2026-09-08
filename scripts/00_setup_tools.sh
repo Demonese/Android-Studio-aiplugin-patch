@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 00_setup_tools.sh — 准备构建工具：JDK 21、CFR 反编译器、ASM 字节码库
+# 00_setup_tools.sh — 准备构建工具：JDK 25、CFR 反编译器、ASM 字节码库
 #
 # 用法：
 #   ./scripts/00_setup_tools.sh            # 下载缺失的工具 jar 并做 SHA-1 校验
@@ -30,9 +30,10 @@ command -v curl >/dev/null 2>&1 || { echo "[!] 未找到 curl，请先安装（s
 command -v sha1sum >/dev/null 2>&1 || { echo "[!] 未找到 sha1sum（coreutils）"; exit 1; }
 
 # --- JDK ---
+# aiplugin.jar 的 class 文件为 major 69（Java 25），构建/运行测试需要 JDK 25。
 if ! command -v javac >/dev/null 2>&1; then
-  echo "[!] 未找到 javac。请安装 JDK 21，例如："
-  echo "    sudo apt-get install -y openjdk-21-jdk-headless"
+  echo "[!] 未找到 javac。请安装 JDK 25，例如："
+  echo "    sudo apt-get install -y openjdk-25-jdk-headless"
   exit 1
 fi
 echo "[ok] javac: $(javac -version 2>&1)"
@@ -84,15 +85,17 @@ fetch "$TOOLS/cfr-${CFR_VERSION}.jar" \
   "48ef4892cfe8feffddbbd0ff077735140557db74"
 
 # --- ASM（字节码补丁/校验）---
+# ASM 9.10.1 SHA-1 取自 Maven Central 官方 .sha1（2026-08 核对）
+# ASM 9.10.1 支持 Java 25 class file（aiplugin.jar 为 major 69）
 while read -r a sha; do
   fetch "$TOOLS/${a}-${ASM_VERSION}.jar" \
     "org/ow2/asm/${a}/${ASM_VERSION}/${a}-${ASM_VERSION}.jar" "$sha"
 done <<EOF
-asm          f0ed132a49244b042cd0e15702ab9f2ce3cc8436
-asm-tree     3a53139787663b139de76b627fca0084ab60d32c
-asm-util     9e23359b598ec6b74b23e53110dd5c577adf2243
-asm-analysis f97a3b319f0ed6a8cd944dc79060d3912a28985f
-asm-commons  406c6a2225cfe1819f102a161e54cc16a5c24f75
+asm          ada2141c0cc52ee8f5c48cd5fa4ce0e794f22236
+asm-tree     e244332a17564c1d1572449399a842de35881be2
+asm-util     7bb9d450e8d4cbf9f9e04096c44bbfe7fba80b15
+asm-analysis 8d49f14d51f632cb1d87c88d1ceaf50db0d8af1b
+asm-commons  4229e4c55fd8e01c23f9fe9884075cc628aacc50
 EOF
 
 echo "== 工具准备完成（$TOOLS）=="
