@@ -12,11 +12,12 @@ import kotlinx.serialization.internal.StringSerializer;
 // 思考强度运行时存储：会话ID -> 档位（持久化字段 reasoningEffort 的内存侧）。
 // - 加载会话元数据时由 $$serializer.deserialize 尾部调 onLoaded 写入；
 // - 切换/新建会话时由 ActiveConversationOrchestrator.selectConversation 调 onConversationSelection；
-// - 保存时由 TopLevelConversation/DefaultConversation.prepareMetadata 调 applyTo 回填 PersistedMetadata；
+// - 保存时由 DefaultConversation.prepareMetadata 调 applyTo 回填 PersistedMetadata；
 // - 下拉选择时由 ThinkingEffortPicker 调 onPickerSelect。
 public final class ThinkingEffortStore {
     public static final String DEFAULT_LEVEL = "medium";
-    static final int ELEMENT_INDEX = 12;
+    // 元素下标：PersistedMetadata 原生字段 16 个，reasoningEffort 为第 17 个（下标 16）。
+    static final int ELEMENT_INDEX = 16;
     private static final ConcurrentHashMap<String, String> KNOWN = new ConcurrentHashMap<>();
     private static volatile String currentId = null;
     private static volatile String activeLevel = DEFAULT_LEVEL;

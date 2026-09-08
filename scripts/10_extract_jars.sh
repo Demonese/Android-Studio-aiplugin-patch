@@ -48,7 +48,6 @@ unzip -o -q "$WORK/as/plugin/aiplugin.jar" \
   "com/google/studiobot/ui/querybox/QueryBoxKt.class" \
   "com/google/studiobot/agentsdk/conversations/PersistedMetadata.class" \
   "com/google/studiobot/agentsdk/conversations/PersistedMetadata\$\$serializer.class" \
-  "com/google/studiobot/agentsdk/conversations/TopLevelConversation.class" \
   "com/google/studiobot/agentsdk/conversations/DefaultConversation.class" \
   "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
   "com/google/studiobot/controller/TrajectoryTimelineController.class" \

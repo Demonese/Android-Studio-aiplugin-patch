@@ -7,12 +7,16 @@
 #   阶段2  ASM 补丁 OpenAiModelApi/$streamGenerateContent$1/OpenAiModelApiProvider：
 #          按 openAiApiType 选择协议、固定协议时禁用 Responses->Completion 自动回退；
 #          两个 createParams 接入会话级思考强度（reasoning_effort / reasoning.effort）
-#   阶段3  编译新增 Java 源码（依赖阶段1/2产生的 getter/setter）
-#   阶段4  ASM 补丁 RemoteModelProviderInfoPanel：setupUi 加行、update 加载、schema 监听联动
-#   阶段5  ASM 补丁 QueryBoxKt.ActionsRow：模型选择与发送按钮之间插入思考强度下拉
-#   阶段6-9 思考强度持久化：PersistedMetadata 加 reasoningEffort 字段、序列化器读写、
-#          prepareMetadata 保存回填、会话切换刷新
-#   阶段10 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
+#   阶段3  ASM 补丁 PersistedMetadata：加 reasoningEffort 字段/访问器与写出
+#   阶段4  编译新增 Java 源码（依赖阶段1/2产生的 getter/setter）
+#   阶段5  ASM 补丁 RemoteModelProviderInfoPanel：setupUi 加行、update 加载、schema 监听联动
+#   阶段6  ASM 补丁 QueryBoxKt.ActionsRow：模型选择与发送按钮之间插入思考强度下拉
+#   阶段7  ASM 补丁 PersistedMetadata$$serializer：descriptor/childSerializers/deserialize
+#          读写 reasoningEffort（元素 16）
+#   阶段8  ASM 补丁 DefaultConversation.prepareMetadata：保存回填
+#   阶段9  ASM 补丁 ActiveConversationOrchestrator：会话切换刷新
+#   阶段10 ASM 补丁 TrajectoryTimelineController：会话呈现同步
+#   阶段11 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -54,7 +58,7 @@ java -cp "$WORK/tools-out:$ASMC" PatchTool querybox "$WORK/classes-orig" "$PATCH
 echo "[8/12] 阶段7：补丁 PersistedMetadata\$\$serializer（descriptor 与读取）..."
 java -cp "$WORK/tools-out:$ASMC" PatchTool metaser "$WORK/classes-orig" "$PATCHED" "$PATCHED:$OUT:$PLUGIN_JAR:$PLAT:$PLIB:$FULL"
 
-echo "[9/12] 阶段8：补丁两处 prepareMetadata（保存回填）..."
+echo "[9/12] 阶段8：补丁 DefaultConversation.prepareMetadata（保存回填）..."
 java -cp "$WORK/tools-out:$ASMC" PatchTool convmeta "$WORK/classes-orig" "$PATCHED"
 
 echo "[10/12] 阶段9：补丁 ActiveConversationOrchestrator（会话切换刷新）..."
@@ -76,7 +80,6 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/google/studiobot/ui/querybox/QueryBoxKt.class" \
   -C "$PATCHED" "com/google/studiobot/agentsdk/conversations/PersistedMetadata.class" \
   -C "$PATCHED" "com/google/studiobot/agentsdk/conversations/PersistedMetadata\$\$serializer.class" \
-  -C "$PATCHED" "com/google/studiobot/agentsdk/conversations/TopLevelConversation.class" \
   -C "$PATCHED" "com/google/studiobot/agentsdk/conversations/DefaultConversation.class" \
   -C "$PATCHED" "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
   -C "$PATCHED" "com/google/studiobot/controller/TrajectoryTimelineController.class" \

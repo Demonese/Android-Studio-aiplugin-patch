@@ -14,8 +14,10 @@ public class ReasoningEffortPersistTest {
     }
 
     static PersistedMetadata meta(String id) {
+        // PersistedMetadata 16 字段构造（含 hasCustomTitle/delegateName/delegateMetadata/
+        // permissionMode/plannerState/isEphemeral）
         return new PersistedMetadata(2, id, new AgentConfigurationData(), "t", 1, 1L, 2L, 3L,
-                null, Collections.emptySet(), false, null);
+                null, Collections.emptySet(), false, null, null, null, null, false);
     }
 
     public static void main(String[] args) {

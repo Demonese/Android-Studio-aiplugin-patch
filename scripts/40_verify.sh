@@ -36,7 +36,6 @@ for c in \
   "com.google.studiobot.ui.querybox.QueryBoxKt" \
   "com.google.studiobot.agentsdk.conversations.PersistedMetadata" \
   "com.google.studiobot.agentsdk.conversations.PersistedMetadata\$\$serializer" \
-  "com.google.studiobot.agentsdk.conversations.TopLevelConversation" \
   "com.google.studiobot.agentsdk.conversations.DefaultConversation" \
   "com.google.studiobot.controller.ActiveConversationOrchestrator" \
   "com.google.studiobot.controller.TrajectoryTimelineController"; do
