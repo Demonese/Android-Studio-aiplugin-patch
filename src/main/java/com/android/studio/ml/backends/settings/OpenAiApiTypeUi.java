@@ -15,6 +15,7 @@ import com.intellij.ui.dsl.builder.ComboBoxKt;
 import com.intellij.ui.dsl.builder.Panel;
 import com.intellij.ui.dsl.builder.Row;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -58,9 +59,11 @@ public final class OpenAiApiTypeUi {
         }
     }
 
-    // 面板的 getCurrentProvider（Function0<ProviderDetails>）是 private 字段：
-    // Kotlin 在新版插件里不再为它生成 synthetic 访问器，直接反射读字段。
+    // 面板的 getCurrentProvider（Function0<ProviderDetails>）为 private：优先反射读该字段
+    // （字段名是稳定 API），不依赖 Kotlin 是否会为其生成 synthetic 访问器；
+    // 字段取不到时退回访问器。两条路径都失败则放弃回写（不把异常抛进 Swing 事件里）。
     private static volatile Field getCurrentProviderField;
+    private static volatile Method getCurrentProviderAccessor;
 
     private static Object invokeGetCurrentProvider(RemoteModelProviderInfoPanel panel) {
         try {
@@ -71,8 +74,19 @@ public final class OpenAiApiTypeUi {
                 getCurrentProviderField = f;
             }
             return f.get(panel);
-        } catch (Throwable t) {
-            return null;
+        } catch (Throwable fieldMissing) {
+            try {
+                Method m = getCurrentProviderAccessor;
+                if (m == null) {
+                    m = RemoteModelProviderInfoPanel.class.getDeclaredMethod(
+                            "access$getGetCurrentProvider$p", RemoteModelProviderInfoPanel.class);
+                    m.setAccessible(true);
+                    getCurrentProviderAccessor = m;
+                }
+                return m.invoke(null, panel);
+            } catch (Throwable accessorMissing) {
+                return null;
+            }
         }
     }
 
