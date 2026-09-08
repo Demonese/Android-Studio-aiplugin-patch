@@ -255,7 +255,9 @@ public class PatchTool {
         l2.add(new MethodInsnNode(INVOKESTATIC, UI, "load", "(L" + PANEL + ";L" + RPD + ";)V", false));
         update.instructions.insert(setCall, l2);
 
-        MethodNode lambda4 = findMethod(cn, "_init_$lambda$4", "(L" + PANEL + ";L" + API_SCHEMA + ";)Lkotlin/Unit;");
+        // schemaProperty 的 afterChange lambda：按“调用 RemoteProviderData.setSchema”定位，
+        // 不依赖 Kotlin 生成的 _init_$lambda$N 编号（编号随属性声明/监听注册顺序变化）
+        MethodNode lambda4 = findSetSchemaLambda(cn);
         AbstractInsnNode setSchema = findInvoke(lambda4, RPD, "setSchema", "(L" + API_SCHEMA + ";)V");
         InsnList l3 = new InsnList();
         l3.add(new VarInsnNode(ALOAD, 0));
@@ -267,6 +269,31 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, PANEL, cw.toByteArray());
         System.out.println("patched " + PANEL);
+    }
+
+    // 面板中唯一接收 ApiSchema 并回写 setSchema 的 lambda（schemaProperty.afterChange）。
+    static MethodNode findSetSchemaLambda(ClassNode cn) {
+        String desc = "(L" + PANEL + ";L" + API_SCHEMA + ";)Lkotlin/Unit;";
+        MethodNode found = null;
+        for (MethodNode m : cn.methods) {
+            if (!m.desc.equals(desc)) {
+                continue;
+            }
+            for (AbstractInsnNode in : m.instructions) {
+                if (in instanceof MethodInsnNode
+                        && ((MethodInsnNode) in).owner.equals(RPD)
+                        && ((MethodInsnNode) in).name.equals("setSchema")) {
+                    if (found != null) {
+                        throw new IllegalStateException("multiple setSchema lambdas in " + cn.name);
+                    }
+                    found = m;
+                }
+            }
+        }
+        if (found == null) {
+            throw new IllegalStateException("setSchema lambda not found in " + cn.name);
+        }
+        return found;
     }
 
     // 阶段：让 openAiApiType 设置真正生效（协议选择 + 禁用自动回退）
