@@ -10,6 +10,12 @@ LIB="$WORK/as/Android Studio/lib"
 PLUGIN_JAR="$WORK/as/plugin/aiplugin.jar"
 KOTLIN_STDLIB="$WORK/as/$KOTLIN_STDLIB_IN_ZIP"
 
+# Java 启动参数：stdout 编码固定 UTF-8。
+# 容器 locale 不完整时 JVM 的 native.encoding 退化为 US-ASCII，而 JDK 18+（JEP 400）
+# 的 System.out 编码跟随 stdout.encoding（而非 file.encoding），测试输出的中文会变 '?'。
+# 所有 java 运行统一带该参数（JDK 17 及以下不认识该属性，静默忽略，无副作用）。
+JAVA_ENC="-Dstdout.encoding=UTF-8"
+
 # 编译/校验用 classpath（平台 jar + kotlin-stdlib + annotations）
 platform_cp() {
   local cp=""

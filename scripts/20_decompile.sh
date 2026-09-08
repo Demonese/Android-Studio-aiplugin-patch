@@ -16,7 +16,7 @@ if [[ -d "$OUT" ]]; then
 fi
 mkdir -p "$OUT"
 echo "[*] 反编译 aiplugin.jar -> $OUT （约 1-2 分钟）"
-java -Xmx4g -jar "$CFR_JAR" "$PLUGIN_JAR" --outputdir "$OUT" --silent true || true
+java "$JAVA_ENC" -Xmx4g -jar "$CFR_JAR" "$PLUGIN_JAR" --outputdir "$OUT" --silent true || true
 
 N=$(find "$OUT" -name "*.java" | wc -l)
 echo "== 反编译完成：$N 个 .java 文件 =="
