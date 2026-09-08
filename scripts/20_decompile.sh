@@ -8,6 +8,12 @@ CFR_JAR="$PROJ/tools/cfr-${CFR_VERSION}.jar"
 [[ -f "$PLUGIN_JAR" ]] || { echo "[!] 缺少 $PLUGIN_JAR，先运行 10_extract_jars.sh"; exit 1; }
 
 OUT="$WORK/decompiled"
+# 每次重新生成前先清空：CFR 不会删除已从 jar 中消失的类，
+# 旧版残留会在分析时让人误判“这个类还在”（已经踩过两次）
+if [[ -d "$OUT" ]]; then
+  echo "[*] 清理旧的 $OUT ..."
+  rm -rf "$OUT"
+fi
 mkdir -p "$OUT"
 echo "[*] 反编译 aiplugin.jar -> $OUT （约 1-2 分钟）"
 java -Xmx4g -jar "$CFR_JAR" "$PLUGIN_JAR" --outputdir "$OUT" --silent true || true
