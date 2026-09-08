@@ -8,7 +8,7 @@
 #   6) ThinkingEffortPickerTest：思考强度下拉状态与事件
 #   7) ReasoningEffortPersistTest：reasoningEffort 序列化往返与 Store 行为
 #   8) ReasoningEffortApiTest：两个 createParams 按会话档位发 reasoning_effort/reasoning.effort
-#   9) UiLoadTest：新增 UI 类加载
+#   9) UiLoadTest：设置界面补丁面与布局兼容性（注入点相对位置 + 反射目标 + 枚举/转换器）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -80,9 +80,9 @@ javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/te
 java -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -E "ok:|FAILED|ALL_OK"
 java -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -q ALL_OK || { echo "[!] ReasoningEffortApiTest 失败"; exit 1; }
 
-echo "[9/9] UI 类加载测试 ..."
-javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
-java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|fromId|UI_CLASSES_LOAD_OK"
-java -cp "$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }
+echo "[9/9] 设置界面补丁面与布局校验 ..."
+javac --release "$JAVA_RELEASE" -nowarn -cp "$ASMC:$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
+java -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|  |ok:|FAILED|UI_CLASSES_LOAD_OK"
+java -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }
 
 echo "== 全部验证通过 =="
