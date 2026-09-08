@@ -75,7 +75,7 @@ cd aiplugin-patch
 ./scripts/00_setup_tools.sh     # 下载工具 jar（CFR/ASM，Maven Central + SHA-1 校验）
 ./scripts/10_extract_jars.sh    # 从项目目录下的 "Android Studio.zip" 提取依赖
 ./scripts/30_build_patch.sh     # 构建 dist/aiplugin-patched.jar
-./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 行为测试 + 类加载）
+./scripts/40_verify.sh          # 验证（字节码 + 序列化往返 + 行为测试 + 设置界面布局校验）
 ```
 
 可选：`./scripts/20_decompile.sh` 重新生成反编译源码到 `work/decompiled/`。
@@ -119,6 +119,12 @@ cd aiplugin-patch
 - `unzip`、`curl`、网络（首次下载 CFR/ASM；ASM 9.10.1 支持 Java 25 class 文件）
 - Android Studio 发行包 zip：**放到项目目录根下**（默认 `./Android Studio.zip`）；
   如放在别处，用环境变量覆盖：`AS_ZIP=/path/to/"Android Studio.zip" ./scripts/10_extract_jars.sh`
+
+## 目标版本
+
+Android Studio **2026.1.4**，build `261.26222.65.2614.16204760`（当前项目用的是
+Windows 发行包；补丁只依赖 `plugins/gemini/lib/aiplugin.jar`，与宿主平台无关）。
+逆向事实与锚点均按该版本记录，具体类/方法名见 `docs/analysis.md`。
 
 ## 技术说明
 

@@ -418,9 +418,11 @@ public class PatchTool {
     // OpenAiResponsesApiV2.toInputItem(ModelChatMessage,...)：DeepSeek 思考模式要求
     // 每轮 assistant 消息回传 reasoning_text；模型有时不返回思考块就直接返回工具调用，
     // 原逻辑此时跳过 reasoning item，导致下一轮请求 400。
-    // toolCalls 循环起点（getToolCalls 前的 aload_1）是三条路径的汇合点，且其前已有
-    // 接受 Object 局部变量的 F_FULL 汇合帧：在此插入 OpenAiResponsesSupport.ensureReasoning，
-    // 三条路径都会流经它，由它判断（模型匹配且无 thought/thoughtSignature）是否补占位思考。
+    // toolCalls 循环起点（getToolCalls 前的 aload_1）是 reasoning 分支的汇合点：
+    // 构造并加入 reasoning item 的路径、整块跳过的路径（thought 与 thoughtSignature 皆空
+    // 或模型不匹配）在此合流，合流处已有 F_SAME 帧（部分局部变量归并为 Object/Null）。
+    // 在帧之后插入 OpenAiResponsesSupport.ensureReasoning，两条路径都会流经它，
+    // 由它判断（模型匹配且无 thought/thoughtSignature）是否补占位思考。
     // 不改任何分支、不新增帧。
     static void patchResponsesApi(Path in, Path out) throws Exception {
         ClassNode cn = new ClassNode();

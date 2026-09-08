@@ -52,8 +52,8 @@ ASM 补丁（PatchTool.java）
 │   ├── setupUi：在 LDC "remote.studiobot.settings.apikey.title" 之前
 │   │            插入 OpenAiApiTypeUi.addRow(this, builder)   // 行位于 URL Schema 与 API key 之间
 │   ├── update()：schemaProperty.set(...) 之后插入 OpenAiApiTypeUi.load(this, remoteProviderData)
-│   └── _init_$lambda$4（schema afterChange）：setSchema 之后插入
-│                OpenAiApiTypeUi.syncVisibility(panel, schema)
+│   └── schema afterChange lambda（按“调用 setSchema”定位，不依赖 Kotlin 编号）：
+│                setSchema 之后插入 OpenAiApiTypeUi.syncVisibility(panel, schema)
 ├── OpenAiModelApi
 │   ├── + 字段 openAiApiType（默认 AUTO，<init> 末尾初始化）+ getter/setter
 │   └── streamGenerateContent：supportResponses.get() 替换为
@@ -93,9 +93,10 @@ ASM 补丁（PatchTool.java）
    这些方法均由 ASM 阶段添加，因此必须先补丁数据类与 API 类、再编译新源码
    （见 30_build_patch.sh 的阶段顺序：data → api → metadata → javac →
    panel → querybox → metaser → convmeta → orch → timeline → 组装）。
-2. **面板私有状态用反射读**：面板的 `getCurrentProvider`（`Function0<ProviderDetails>`）
-   是 private 字段且新版插件不再为其生成 Kotlin synthetic 访问器，`OpenAiApiTypeUi`
-   用缓存的反射 Field 直接读该字段。
+2. **面板私有状态用反射读**：回写设置需要面板的 `getCurrentProvider`（private
+   `Function0<ProviderDetails>`）。反射优先读 private 字段（字段名是稳定 API），
+   取不到时退回 Kotlin synthetic 访问器 `access$getGetCurrentProvider$p`；
+   两者都失败则放弃回写，不把异常抛进 Swing 事件链。
 3. **可见性**：新行 `visibleIf(isProviderSettingVisible AND apiTypeVisible)`，
    `apiTypeVisible = (schema == OPENAI)`；schema 变更经既有 afterChange 链实时联动。
 4. **状态管理**：`OpenAiApiTypeUi.STATES` 为 `WeakHashMap<面板, State>`，
@@ -103,7 +104,8 @@ ASM 补丁（PatchTool.java）
    `load()` 可能先于 `setupUi()` 发生（update 先调用），State 惰性创建解决时序问题。
 5. **帧与栈**：绝大多数插入为无分支直线代码；新增分支处（equals 的 IF_ACMPEQ、
    catch 处理器的 IFEQ）均复用已有跳转目标或补 F_SAME 帧；
-   使用 `ClassWriter.COMPUTE_MAXS` 重算最大栈。CheckClassAdapter 校验通过。
+   用 `ClassWriter.COMPUTE_MAXS` 重算最大栈（`PersistedMetadata$$serializer.deserialize`
+   因新增 switch 分支目标改用 `COMPUTE_FRAMES`，见持久化一节）。CheckClassAdapter 校验通过。
 6. **向后兼容**：旧配置 XML 无 `openAiApiType` option → 反序列化走构造器默认值 AUTO；
    旧对话 metadata.json 无 `reasoningEffort` → 解码为 null → 默认 medium。
 7. **工具链**：插件 class 文件为 major 69（Java 25），ASM 9.10.1 才能读改写；
@@ -119,7 +121,7 @@ ASM 补丁（PatchTool.java）
 2. `ModelProviderConfigurable.isModified()` 用 `Intrinsics.areEqual(uiState, loadState())`
    （列表逐元素 equals）判断修改 → 只改 openAiApiType 时恒为 false。
 3. Apply 按钮由 isModified 驱动 → 不亮。
-4. 平台 `ConfigurableEditor.apply()`：
+4. 平台 `options.newEditor.ConfigurableEditor.apply()`：
    `apply(myApplyAction.isEnabled() ? configurable : null)` —— Apply 未启用时点 OK
    **直接跳过 apply** → `ModelDataStateManagerImpl.saveState` 根本不执行 → 不写 ai.providers.xml。
 
@@ -168,7 +170,10 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    null 不写出、Store 加载/选择/保存/新建/旧对话默认。
 8. `ReasoningEffortApiTest`：7 档 × 2 协议逐一断言 `reasoning_effort` /
    `reasoning.effort` 等于档位；`omitReasoningEffort=true` 时 Completion 不带该参数。
-9. `UiLoadTest`：新增类可加载、枚举值正确。
+9. `UiLoadTest`：设置界面补丁面与布局兼容性 —— 新增类可加载、枚举 id/转换器回退正确、
+   `openAiApiType` 字段带 `@OptionTag(converter=...)`、面板反射目标存在，
+   并断言三处注入点的相对位置（协议下拉行必须在 "URL Schema" 与 "API key" 两行之间，
+   `load` 紧跟 `schemaProperty.set`，`syncVisibility` 紧跟 `setSchema`）。
 
 ## 安装与测试
 
@@ -208,8 +213,11 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    `new OpenAiModelApi(...)` 之后从 `providerSettings`（RemoteProviderData，局部变量9）
    读取 `openAiApiType` 写入。`LocalModelApiProvider` 不补丁（本地模型无此设置，
    字段保持默认 AUTO，行为不变）。
-4. **设置变更生效时机**：`computeState` 由设置通知流驱动重新计算，
-   Apply 设置后新的 `OpenAiModelApi` 实例携带新协议值；无需重启 IDE。
+4. **设置变更生效时机**：`OpenAiModelApiProvider` 构造时把
+   `StudioBotSettingsNotificationService.notificationsFlow` 接成
+   `map { computeState() }.stateIn(...)`，因此 `saveState` 尾部的
+   `notifySettingsUpdated()` 会驱动重算，新的 `OpenAiModelApi` 实例携带新协议值；
+   无需重启 IDE。
 
 ## DeepSeek 思考模式 "reasoning_text must be passed back" 400 错误（Responses 占位思考）
 
@@ -227,10 +235,11 @@ the thinking mode must be passed back to the API.`
 content text = `继续调用工具……`）。
 
 **注入点**（ASM，`patchResponsesApi`）：`toInputItem` 中 toolCalls 循环起点
-（`getToolCalls` 前的 `aload_1`）。该位置是三条控制流路径的汇合点——
-思考/签名非空的正常路径、两者皆空的跳过路径（原 `ifne`）、模型不匹配路径（原 `ifeq`），
-且汇合点前已有 F_FULL 帧（局部变量按 Object 归并）。helper 插在帧之后：
-三条路径全部流经它，由 helper 内部条件判断是否注入——**不改任何分支、不新增栈帧**。
+（`getToolCalls` 前的 `aload_1`）。原生代码为
+`if (!((thought 与 signature 皆空) || 模型不匹配)) { 构造并 add reasoning item }`，
+因此“加入该项”与“整块跳过”两条路径在 toolCalls 循环前合流，合流处已有 `F_SAME` 帧
+（部分局部变量归并为 Object/Null）。helper 插在帧之后：两条路径全部流经它，
+由 helper 内部条件判断是否注入——**不改任何分支、不新增栈帧**。
 
 **互斥性**：原逻辑仅在（thought 或 signature 非空）且模型匹配时加 reasoning item；
 helper 仅在两者皆空且模型匹配时注入 → 不会重复注入。
@@ -302,7 +311,7 @@ medium/high/xhigh/max），选择按会话持久化到对话目录 `metadata.jso
 **持久化（kotlinx.serialization 加字段）**
 - `PersistedMetadata`：加私有字段 `reasoningEffort` + getter/setter；
   `write$Self` 末尾直线调 `ThinkingEffortStore.encodeElement`（元素 16，
-  nullable String，非空才写）。
+  nullable String；值为 null 且 descriptor 不要求编码默认值时不写出）。
 - `PersistedMetadata$$serializer`（PersistedMetadata 本身有 16 个原生字段）
   - `<clinit>` descriptor 容量 16+1，追加 `addElement("reasoningEffort", true)`；
   - `childSerializers()` 数组 16+1，新下标补
@@ -347,7 +356,7 @@ null 不写出、Store 加载/选择/保存/新建/旧对话默认）。CheckCla
   → `InvocationContextImpl` → `ModelRequest` → `OpenAiModelApi.streamGenerateContent`
   （modelId 取自 ModelApi 持有的 ModelConfig）→ 两个 `createParams(modelId, ...)`。
 - 原生 reasoning effort 取自 `modelRequest.generationConfig.thinkingConfig`：
-  - Completion：`includeThoughts==true && !omitReasoningEffort` 时
+  - Completion：`thinkingConfig != null && includeThoughts==true && !omitReasoningEffort` 时
     `toReasoningEffort(thinkingLevel)`；ThinkingLevel 仅 low/medium/high，
     null→MEDIUM。
   - Responses：仅当 `thinkingLevel!=null` 才发 `reasoning.effort`；
