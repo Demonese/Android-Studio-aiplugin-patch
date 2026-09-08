@@ -2,6 +2,7 @@ import com.google.studiobot.agentsdk.agents.AgentConfigurationData;
 import com.google.studiobot.agentsdk.conversations.PersistedMetadata;
 import com.google.studiobot.controller.ConversationSelection;
 import com.google.studiobot.ui.querybox.ThinkingEffortStore;
+import com.openai.models.ReasoningEffort;
 import java.util.Collections;
 import kotlinx.serialization.json.Json;
 
@@ -80,6 +81,24 @@ public class ReasoningEffortPersistTest {
         ThinkingEffortStore.onLoaded("conv-b", null);
         ThinkingEffortStore.onConversationPresented("conv-a");
         check("high".equals(ThinkingEffortStore.getActiveLevel()), "重启首会话：呈现事件同步正确档位");
+
+        // —— 完整生命周期：切换 → 保存回填 → 落盘 → 重启读取 → 请求档位 ——
+        // （applyTo 即 prepareMetadata 补丁的注入行为，encode/decode 走真实补丁字节码）
+        ThinkingEffortStore.resetForTest();
+        ThinkingEffortStore.onConversationSelection(ConversationSelection.EmptyConversation.INSTANCE);
+        ThinkingEffortStore.onPickerSelect("xhigh");
+        PersistedMetadata life = meta("conv-life");
+        ThinkingEffortStore.applyTo(life);
+        check("xhigh".equals(life.getReasoningEffort()), "切换后保存回填档位");
+        String lifeJson = Json.Default.encodeToString(PersistedMetadata.Companion.serializer(), life);
+        check(lifeJson.contains("\"reasoningEffort\":\"xhigh\""), "落盘 JSON 含所选档位");
+        ThinkingEffortStore.resetForTest(); // 模拟重启：清空运行时状态
+        Json.Default.decodeFromString(PersistedMetadata.Companion.serializer(), lifeJson);
+        check("xhigh".equals(ThinkingEffortStore.getActiveLevel()), "重启后反序列化读取到保存档位");
+        check(ThinkingEffortStore.toOpenAiReasoningEffort() == ReasoningEffort.XHIGH,
+                "重启后请求档位映射正确");
+        ThinkingEffortStore.onConversationSelection(ConversationSelection.EmptyConversation.INSTANCE);
+        check("medium".equals(ThinkingEffortStore.getActiveLevel()), "重启后新建会话默认 medium");
 
         System.out.println(failed == 0 ? "ALL_OK" : "FAILED_COUNT=" + failed);
     }
