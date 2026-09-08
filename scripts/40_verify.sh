@@ -8,7 +8,7 @@
 #   6) ThinkingEffortPickerTest：思考强度下拉状态与事件
 #   7) ReasoningEffortPersistTest：reasoningEffort 序列化往返与 Store 行为
 #   8) ReasoningEffortApiTest：两个 createParams 按会话档位发 reasoning_effort/reasoning.effort
-#   9) UiLoadTest：设置界面补丁面与布局兼容性（注入点相对位置 + 反射目标 + 枚举/转换器）
+#   9) UiLoadTest：设置界面与发送区布局兼容性（注入点相对位置 + 反射目标 + 枚举/转换器）
 #  10) ApiProtocolUiBehaviorTest：协议下拉控件运行时行为（headless 构造真实面板，
 #      验证 load 加载存储值 / 厂商切换显隐联动 / 切换回写 live provider / 容错）
 #  11) ProviderApiTypePropagationTest：设置 -> computeState -> ModelApi 实例 端到端传播
@@ -88,7 +88,7 @@ javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/te
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -q ALL_OK || { echo "[!] ReasoningEffortApiTest 失败"; exit 1; }
 
-echo "[9/11] 设置界面补丁面与布局校验 ..."
+echo "[9/11] 设置界面与发送区布局校验 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$ASMC:$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
 java "$JAVA_ENC" -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|  |ok:|FAILED|UI_CLASSES_LOAD_OK"
 java "$JAVA_ENC" -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }

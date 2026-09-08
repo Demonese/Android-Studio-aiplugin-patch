@@ -170,10 +170,13 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
    null 不写出、Store 加载/选择/保存/新建/旧对话默认。
 8. `ReasoningEffortApiTest`：7 档 × 2 协议逐一断言 `reasoning_effort` /
    `reasoning.effort` 等于档位；`omitReasoningEffort=true` 时 Completion 不带该参数。
-9. `UiLoadTest`：设置界面补丁面与布局兼容性 —— 新增类可加载、枚举 id/转换器回退正确、
+9. `UiLoadTest`：设置界面与发送区补丁面、布局兼容性 —— 新增类可加载、枚举 id/转换器回退正确、
    `openAiApiType` 字段带 `@OptionTag(converter=...)`、面板反射目标存在，
    并断言三处注入点的相对位置（协议下拉行必须在 "URL Schema" 与 "API key" 两行之间，
-   `load` 紧跟 `schemaProperty.set`，`syncVisibility` 紧跟 `setSchema`）。
+   `load` 紧跟 `schemaProperty.set`，`syncVisibility` 紧跟 `setSchema`）；
+   另断言发送区 `ActionsRow` 布局：思考强度下拉（`ThinkingEffortPicker.render`）位于
+   ModelPicker 与 Submit（AnimatedContent）之间、两侧各 8dp 间隙（宽度常量与 Compose
+   参数掩码同原生间隙），且 render 内部复用 `ModelPickerKt.ModelPicker` 渲染。
 
 ## 安装与测试
 

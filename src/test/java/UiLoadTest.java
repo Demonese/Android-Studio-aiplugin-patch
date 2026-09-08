@@ -9,17 +9,21 @@ import java.util.List;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.IntInsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
-// 设置界面补丁面与布局兼容性校验：
+// 设置界面与发送区补丁面、布局兼容性校验：
 //   1) 新增 UI 类可加载，枚举 id / 转换器回退正确；
 //   2) RemoteProviderData 的 openAiApiType 字段带 @OptionTag(converter=...)；
 //   3) 面板被补丁依赖的成员仍在（getCurrentProvider 字段、可见性属性访问器、被补丁的方法）；
 //   4) 三处注入点在字节码中的相对位置仍然正确——
 //      addRow 必须落在 "URL Schema" 行与 "API key" 行之间（决定下拉框在界面上的位置），
-//      load 紧跟 schemaProperty.set，syncVisibility 紧跟 setSchema。
+//      load 紧跟 schemaProperty.set，syncVisibility 紧跟 setSchema；
+//   5) 发送区 ActionsRow 布局——思考强度下拉（ThinkingEffortPicker.render）位于模型选择
+//      （ModelPicker）与 Submit（AnimatedContent）之间、两侧各 8dp 间隙（宽度常量与
+//      Compose 参数掩码同原生间隙），且 render 内部复用 ModelPickerKt.ModelPicker 渲染。
 public class UiLoadTest {
 
     private static final String PANEL = "com.android.studio.ml.backends.settings.RemoteModelProviderInfoPanel";
@@ -42,6 +46,7 @@ public class UiLoadTest {
         checkDataField();
         checkPanelMembers();
         checkInjectionPoints();
+        checkQueryBoxLayout();
 
         if (failCount > 0) {
             System.out.println(failCount + " FAILED");
@@ -108,6 +113,90 @@ public class UiLoadTest {
         int setSchema = callIndex(lambda, "setSchema");
         int sync = callIndex(lambda, "syncVisibility");
         check("schema 变更后联动可见性", setSchema < sync);
+    }
+
+    // ---- 5) 发送区 ActionsRow 布局（思考强度下拉位置与样式）----
+    private static void checkQueryBoxLayout() throws Exception {
+        ClassNode cn = read("com.google.studiobot.ui.querybox.QueryBoxKt");
+        MethodNode row = method(cn, "ActionsRow", null);
+        List<AbstractInsnNode> is = insns(row);
+        Integer modelPicker = null, spacer1 = null, render = null, spacer2 = null, animated = null;
+        for (int i = 0; i < is.size(); i++) {
+            AbstractInsnNode in = is.get(i);
+            if (!(in instanceof MethodInsnNode)) {
+                continue;
+            }
+            MethodInsnNode mi = (MethodInsnNode) in;
+            if (mi.owner.equals("com/google/studiobot/ui/trajectory/ModelPickerKt")
+                    && mi.name.equals("ModelPicker") && modelPicker == null) {
+                modelPicker = i;
+            } else if (mi.owner.equals("com/google/studiobot/ui/querybox/ThinkingEffortPicker")
+                    && mi.name.equals("render") && render == null) {
+                render = i;
+            } else if (mi.owner.equals("androidx/compose/foundation/layout/SpacerKt")
+                    && mi.name.equals("Spacer")) {
+                if (modelPicker != null && spacer1 == null) {
+                    spacer1 = i;
+                } else if (modelPicker != null && render != null && spacer2 == null) {
+                    spacer2 = i;
+                }
+            } else if (mi.owner.equals("androidx/compose/animation/AnimatedContentKt")
+                    && mi.name.equals("AnimatedContent") && animated == null) {
+                animated = i;
+            }
+        }
+        check("ActionsRow 含 ModelPicker/Spacer/render/Spacer/AnimatedContent 序列",
+                modelPicker != null && spacer1 != null && render != null
+                        && spacer2 != null && animated != null);
+        check("思考强度下拉位于模型选择与 Submit 按钮之间",
+                modelPicker != null && spacer1 < render && render < spacer2 && spacer2 < animated);
+        check("模型选择与思考强度之间为 8dp 间隙", isWidth8(is, spacer1));
+        check("思考强度与 Submit 之间为 8dp 间隙", isWidth8(is, spacer2));
+        check("两侧间隙 Compose 参数掩码同原版(6)", isBipush6(is, spacer1) && isBipush6(is, spacer2));
+        ClassNode pk = read("com.google.studiobot.ui.querybox.ThinkingEffortPicker");
+        MethodNode renderM = method(pk, "render", "(Landroidx/compose/runtime/Composer;)V");
+        check("思考强度下拉复用 ModelPicker 渲染",
+                hasCall(renderM, "com/google/studiobot/ui/trajectory/ModelPickerKt", "ModelPicker"));
+    }
+
+    // Spacer 的宽度参数：其前（12 条内）最近的 width-3ABfNKs 调用之前存在 bipush 8（= 8.dp）
+    private static boolean isWidth8(List<AbstractInsnNode> is, int spacer) {
+        for (int i = spacer - 1; i >= spacer - 12 && i > 0; i--) {
+            AbstractInsnNode in = is.get(i);
+            if (in instanceof MethodInsnNode
+                    && ((MethodInsnNode) in).name.equals("width-3ABfNKs")) {
+                for (int j = i - 1; j >= i - 12 && j > 0; j--) {
+                    AbstractInsnNode p = is.get(j);
+                    if (p instanceof IntInsnNode
+                            && ((IntInsnNode) p).getOpcode() == org.objectweb.asm.Opcodes.BIPUSH
+                            && ((IntInsnNode) p).operand == 8) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // Spacer 调用的 $changed 掩码参数（调用前一条 BIPUSH）
+    private static boolean isBipush6(List<AbstractInsnNode> is, int spacer) {
+        AbstractInsnNode p = spacer > 0 ? is.get(spacer - 1) : null;
+        return p instanceof IntInsnNode
+                && ((IntInsnNode) p).getOpcode() == org.objectweb.asm.Opcodes.BIPUSH
+                && ((IntInsnNode) p).operand == 6;
+    }
+
+    private static boolean hasCall(MethodNode m, String owner, String name) {
+        for (AbstractInsnNode in : insns(m)) {
+            if (in instanceof MethodInsnNode) {
+                MethodInsnNode mi = (MethodInsnNode) in;
+                if (mi.owner.equals(owner) && mi.name.equals(name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ---- 辅助 ----
