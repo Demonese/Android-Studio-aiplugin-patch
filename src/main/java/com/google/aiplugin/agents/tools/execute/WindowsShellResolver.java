@@ -61,6 +61,24 @@ public final class WindowsShellResolver {
         return name;
     }
 
+    /** Windows summary 文案（getToolDescription 的 Windows 分支）：
+     *  pwsh 可用 → 明确告知模型 PowerShell 7；否则保持原版文案。 */
+    @NotNull
+    public static String summaryForWindows() {
+        return isPwshAvailable()
+                ? "Executes a shell command in PowerShell 7 (the default) or cmd on Windows"
+                : "Executes a shell command in PowerShell (the default) or cmd on Windows";
+    }
+
+    /** Windows description 文案（getToolDescription 的 Windows 分支）：
+     *  pwsh 可用 → pwsh.exe -Command；否则保持原版 powershell.exe 文案。 */
+    @NotNull
+    public static String descriptionForWindows() {
+        return isPwshAvailable()
+                ? "Executes as `pwsh.exe -Command <command>`. Supports background processes via `Start-Process` or `Start-Job`."
+                : "Executes as `powershell.exe -Command <command>`. Supports background processes via `Start-Process` or `Start-Job`.";
+    }
+
     /** 探测 pwsh 是否可用（首次调用后缓存；非 Windows 恒 false）。
      *  注意：先查缓存再查 os.name，保证测试注入（setForTesting）在非 Windows 也生效。 */
     public static boolean isPwshAvailable() {

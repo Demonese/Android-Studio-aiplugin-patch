@@ -40,6 +40,7 @@ public class PatchTool {
     static final String EVENT_PRESENTED = "com/google/studiobot/ui/TrajectoryEvent$ConversationPresented";
     static final String STORE = "com/google/studiobot/ui/querybox/ThinkingEffortStore";
     static final String SHELL_HANDLER = "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler";
+    static final String SHELL_TOOL = "com/google/aiplugin/agents/tools/execute/RunShellCommandTool";
     static final String SHELL_RESOLVER = "com/google/aiplugin/agents/tools/execute/WindowsShellResolver";
     static final String KX_DESC = "kotlinx/serialization/descriptors/SerialDescriptor";
     static final String KX_ENCODER = "kotlinx/serialization/encoding/CompositeEncoder";
@@ -61,7 +62,7 @@ public class PatchTool {
             case "convmeta": patchPrepareMetadata(args[1], args[2]); break;
             case "orch": patchOrchestrator(args[1], args[2]); break;
             case "timeline": patchTimelineController(args[1], args[2]); break;
-            case "winshell": patchRunShellHandler(args[1], args[2]); break;
+            case "winshell": patchRunShell(args[1], args[2]); break;
             default: throw new IllegalArgumentException(cmd);
         }
     }
@@ -1005,6 +1006,49 @@ public class PatchTool {
     //      redirect / effectiveShell / cmd-wrapper / 错误信息全部分支复用
     //   C) LDC "powershell.exe"（powershell 编码分支）→ WindowsShellResolver.executable()
     // 无新分支、无新栈帧（B 为直线代码，A/C 为指令替换），COMPUTE_MAXS 即可。
+    static void patchRunShell(String inDir, String outDir) throws Exception {
+        patchRunShellHandler(inDir, outDir);
+        patchRunShellToolDescription(inDir, outDir);
+    }
+
+    // RunShellCommandTool.getToolDescription()：Windows 分支文案按 pwsh 可用性选择。
+    // 两处 LDC（summary / description 的 isWindows=true 分支，前驱 IFEQ、后继 GOTO）
+    // 替换为 WindowsShellResolver.summaryForWindows()/descriptionForWindows()；
+    // isWindows 判断保留（Unix 分支 bash 文案不动）。指令替换，无新帧。
+    static void patchRunShellToolDescription(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, SHELL_TOOL)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "getToolDescription", "()Lcom/google/studiobot/agentsdk/tools/ToolDescription;");
+
+        // summary 的 Windows 分支文本（唯一，前驱 IFEQ 后继 GOTO）
+        String summaryText = "Executes a shell command in PowerShell (the default) or cmd on Windows";
+        // description 的 Windows 分支文本（唯一，前驱 IFEQ 后继 GOTO）
+        String descText = "Executes as `powershell.exe -Command <command>`. Supports background processes via `Start-Process` or `Start-Job`.";
+
+        AbstractInsnNode summaryLdc = null;
+        AbstractInsnNode descLdc = null;
+        for (AbstractInsnNode n = m.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == LDC && n instanceof LdcInsnNode) {
+                Object cst = ((LdcInsnNode) n).cst;
+                if (summaryText.equals(cst)) summaryLdc = n;
+                else if (descText.equals(cst)) descLdc = n;
+            }
+        }
+        if (summaryLdc == null || descLdc == null) {
+            throw new IllegalStateException("getToolDescription Windows LDC not found (summary=" + (summaryLdc != null)
+                    + ", desc=" + (descLdc != null) + ")");
+        }
+        m.instructions.set(summaryLdc, new MethodInsnNode(INVOKESTATIC, SHELL_RESOLVER, "summaryForWindows", "()Ljava/lang/String;", false));
+        m.instructions.set(descLdc, new MethodInsnNode(INVOKESTATIC, SHELL_RESOLVER, "descriptionForWindows", "()Ljava/lang/String;", false));
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, SHELL_TOOL, cw.toByteArray());
+        System.out.println("patched " + SHELL_TOOL);
+    }
+
     static void patchRunShellHandler(String inDir, String outDir) throws Exception {
         Path in = Path.of(inDir);
         Path out = Path.of(outDir);

@@ -153,6 +153,14 @@ public class RunShellCommandWindowsArgTest {
         check("unix 分支回归 → 不出现 pwsh.exe/powershell.exe",
                 a != null && !a[0].contains("pwsh.exe") && !a[0].contains("powershell.exe"));
 
+        // getToolDescription 回归：Linux（isWindows=false）仍返回 bash 文案，
+        // 证明补丁未破坏 Unix 分支；Windows 分支文案由 Resolver 单元测试覆盖
+        com.google.aiplugin.agents.tools.execute.RunShellCommandTool tool =
+                new com.google.aiplugin.agents.tools.execute.RunShellCommandTool();
+        com.google.studiobot.agentsdk.tools.ToolDescription td = tool.getToolDescription();
+        check("unix ToolDescription → summary 为 bash 文案（isWindows=false）",
+                td != null && "Executes a shell command in bash (the default), zsh or sh".equals(td.summary()));
+
         WindowsShellResolver.setForTesting(null);
         System.out.println(failures == 0 ? "WINDOWS_ARG_OK" : "WINDOWS_ARG_FAILED: " + failures);
         if (failures != 0) System.exit(1);

@@ -47,7 +47,8 @@ for c in \
   "com.google.studiobot.agentsdk.conversations.DefaultConversation" \
   "com.google.studiobot.controller.ActiveConversationOrchestrator" \
   "com.google.studiobot.controller.TrajectoryTimelineController" \
-  "com.google.aiplugin.agents.tools.execute.RunShellCommandHandler"; do
+  "com.google.aiplugin.agents.tools.execute.RunShellCommandHandler" \
+  "com.google.aiplugin.agents.tools.execute.RunShellCommandTool"; do
   java "$JAVA_ENC" -cp "$ASMC:$DIST_JAR:$PLUGIN_JAR:$PLAT:$PLIB:$FULL:$WORK/out" \
     org.objectweb.asm.util.CheckClassAdapter "$c"
   echo "    ok: $c"

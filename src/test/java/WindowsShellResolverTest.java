@@ -53,6 +53,23 @@ public class WindowsShellResolverTest {
         check("setForTesting(false) executable=powershell.exe（现状）",
                 "powershell.exe".equals(WindowsShellResolver.executable()));
 
+        // --- 文案决议（getToolDescription 的 Windows 分支） ---
+        WindowsShellResolver.setForTesting(true);
+        check("pwsh 可用 → summary 明确 PowerShell 7",
+                "Executes a shell command in PowerShell 7 (the default) or cmd on Windows"
+                        .equals(WindowsShellResolver.summaryForWindows()));
+        check("pwsh 可用 → description 为 pwsh.exe -Command",
+                "Executes as `pwsh.exe -Command <command>`. Supports background processes via `Start-Process` or `Start-Job`."
+                        .equals(WindowsShellResolver.descriptionForWindows()));
+
+        WindowsShellResolver.setForTesting(false);
+        check("无 pwsh → summary 保持原版文案",
+                "Executes a shell command in PowerShell (the default) or cmd on Windows"
+                        .equals(WindowsShellResolver.summaryForWindows()));
+        check("无 pwsh → description 保持原版 powershell.exe 文案",
+                "Executes as `powershell.exe -Command <command>`. Supports background processes via `Start-Process` or `Start-Job`."
+                        .equals(WindowsShellResolver.descriptionForWindows()));
+
         // --- decide() 纯函数决策表 ---
         List<String> realOnly = Arrays.asList("C:\\Program Files\\PowerShell\\7\\pwsh.exe");
         check("decide 真实安装路径 -> true",

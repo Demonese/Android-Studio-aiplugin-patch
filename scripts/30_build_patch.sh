@@ -87,6 +87,7 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
   -C "$PATCHED" "com/google/studiobot/controller/TrajectoryTimelineController.class" \
   -C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class" \
+  -C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandTool.class" \
   -C "$OUT" "com/google/aiplugin/agents/tools/execute/WindowsShellResolver.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiType.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiTypeConverter.class" \
