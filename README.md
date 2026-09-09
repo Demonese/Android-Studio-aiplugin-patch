@@ -55,9 +55,9 @@ aiplugin-patch/
 │   │   │   ├── backends/openai/OpenAiApiTypeSupport.java
 │   │   │   ├── backends/openai/OpenAiResponsesSupport.java
 │   │   │   └── backends/openai/OpenAiCompletionSupport.java
-│   │   └── com/google/studiobot/ui/querybox/
-│   │       ├── ThinkingEffortPicker.java
-│   │       └── ThinkingEffortStore.java
+│   │   ├── com/google/studiobot/ui/querybox/
+│   │   │   ├── ThinkingEffortPicker.java
+│   │   │   └── ThinkingEffortStore.java
 │   │   └── com/google/aiplugin/agents/tools/execute/
 │   │       └── WindowsShellResolver.java
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具

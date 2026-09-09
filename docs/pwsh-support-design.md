@@ -248,7 +248,10 @@ public final class WindowsShellResolver {
 - `where.exe` 结果逐行做 `new File(t).isFile()` 复用过滤（where 只输出绝对路径，但防御性校验不增加成本）；`filterWindowsApps` 剔除别名 shim
 - 商店安装场景只有 `pwsh.exe -Command "$true"` 执行验证能区分（未装别名启动即弹商店/退非 0）
 
-## 4. ASM 补丁：patchRunShellHandler（PatchTool 新命令 `winshell`）
+## 4. ASM 补丁：patchRunShell（PatchTool 新命令 `winshell`）
+
+winshell 命令依次执行两个子补丁：`patchRunShellHandler`（本节：RunShellCommandHandler
+三处注入点）与 `patchRunShellToolDescription`（第 5 节：RunShellCommandTool 两处文案 LDC）。
 
 类：`com/google/aiplugin/agents/tools/execute/RunShellCommandHandler`
 方法：`createProcessArgs$aiplugin_agents_agents_core`
@@ -317,16 +320,20 @@ iconst_0; ldc ...; aastore` 结构）。
 
 ### 6.1 PatchTool（`src/patcher/java/PatchTool.java`）
 
-- main 增加 `case "winshell": patchRunShellHandler(args[1], args[2]); break;`
-- 新方法 `patchRunShellHandler(Path in, Path out)`：按第 4 节三个注入点实现；
-  定位失败抛 `IllegalStateException`（与既有代码风格一致，防静默漏改）
+- main 增加 `case "winshell": patchRunShell(args[1], args[2]); break;`
+  （同时补丁 RunShellCommandHandler 与 RunShellCommandTool 两个类）
+- 新方法 `patchRunShellHandler(String inDir, String outDir)`：按第 4 节三个注入点实现；
+  `patchRunShellToolDescription(String inDir, String outDir)`：按第 5 节两处文案 LDC 实现；
+  定位失败均抛 `IllegalStateException`（与既有代码风格一致，防静默漏改）
 
 ### 6.2 `scripts/30_build_patch.sh`
 
-- 新阶段（放阶段 4 javac 之后，命名 [6/13]）：`PatchTool winshell ...`
+- 新阶段（置于全部 ASM 阶段之后、组装之前，现为 [12/13] 阶段11）：`PatchTool winshell ...`
+  （补丁 RunShellCommandHandler 与 RunShellCommandTool 两个类）
 - 阶段 4 的 `find src/main/java` 自动包含新类，无需改
 - 组装 `jar uf` 增加：
   - `-C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class"`
+  - `-C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandTool.class"`
   - `-C "$OUT" "com/google/aiplugin/agents/tools/execute/WindowsShellResolver.class"`
 
 ### 6.3 `scripts/40_verify.sh` 与 Linux 测试方案
@@ -380,8 +387,8 @@ iconst_0; ldc ...; aastore` 结构）。
 | 7 | `""` | 任意 | false | 含 `-NonInteractive` |
 | 8 | `setForTesting(false)`＋`""` | 任意 | true | `[powershell.exe, ...]`（回退＝现状） |
 
-**L4 回归层**：40_verify.sh 现有 11 步全量保持；新增 [12/13][13/13] 两个环节（编号
-顺延），CheckClassAdapter 列表加 `RunShellCommandHandler`。
+**L4 回归层**：40_verify.sh 现有各环节全量保持；新增 [12/13][13/13] 两个环节（编号
+顺延），CheckClassAdapter 列表加 `RunShellCommandHandler` 与 `RunShellCommandTool`。
 
 **可选增强**：Ubuntu 装 Microsoft 官方 Linux 版 pwsh 做 skip-if-absent 冒烟——若
 `where("pwsh")` 命中，真实执行 `pwsh -EncodedCommand <B64>` 验证编码通道

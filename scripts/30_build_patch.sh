@@ -69,7 +69,7 @@ java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool orch "$WORK/classes-orig"
 echo "[11/13] 阶段10：补丁 TrajectoryTimelineController（会话呈现同步）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool timeline "$WORK/classes-orig" "$PATCHED"
 
-echo "[12/13] 阶段11：补丁 RunShellCommandHandler（Windows 平台 pwsh 优先）..."
+echo "[12/13] 阶段11：补丁 RunShellCommandHandler/RunShellCommandTool（pwsh 优先 + 动态文案）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool winshell "$WORK/classes-orig" "$PATCHED"
 
 echo "[13/13] 阶段12：组装 $DIST/aiplugin-patched.jar ..."

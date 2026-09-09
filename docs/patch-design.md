@@ -74,13 +74,6 @@ ASM 补丁（PatchTool.java）
 │   └── createParams：addDeveloperMessage 改写为 addSystemMessage；
 │                toReasoningEffort 调用替换为 ThinkingEffortStore.toOpenAiReasoningEffort()；
 │                reasoningEffort(NONE) 回退分支门控改为恒跳过
-├── RunShellCommandHandler
-│   └── createProcessArgs$aiplugin_agents_agents_core：Windows 分支接入
-│       WindowsShellResolver —— 默认 shell 换 defaultShellName()；shellArg 定稿后
-│       归一化 pwsh→powershell；powershell.exe 换 executable()（pwsh 优先）
-└── RunShellCommandTool
-    └── getToolDescription：isWindows 分支两处 LDC 换
-        summaryForWindows()/descriptionForWindows()（按 pwsh 可用性选文案）
 ├── QueryBoxKt.ActionsRow
 │   └── ModelPicker + 8dp Spacer 之后插入 ThinkingEffortPicker.render + 8dp Spacer
 ├── PersistedMetadata
@@ -91,8 +84,15 @@ ASM 补丁（PatchTool.java）
 │        deserialize 顺序路径与 tableswitch 各插元素 16 读取，构造后回填
 ├── DefaultConversation.prepareMetadata：构造后 dup + applyTo 回填
 ├── ActiveConversationOrchestrator.selectConversation：入口通知 onConversationSelection
-└── TrajectoryTimelineController.handleEvent：ConversationPresented 分支的
-     clearStatus 前插 dup + onConversationPresented（锚定其实参来自 getConversationId）
+├── TrajectoryTimelineController.handleEvent：ConversationPresented 分支的
+│    clearStatus 前插 dup + onConversationPresented（锚定其实参来自 getConversationId）
+├── RunShellCommandHandler
+│   └── createProcessArgs$aiplugin_agents_agents_core：Windows 分支接入
+│       WindowsShellResolver —— 默认 shell 换 defaultShellName()；shellArg 定稿后
+│       归一化 pwsh→powershell；powershell.exe 换 executable()（pwsh 优先）
+└── RunShellCommandTool
+    └── getToolDescription：isWindows 分支两处 LDC 换
+        summaryForWindows()/descriptionForWindows()（按 pwsh 可用性选文案）
 ```
 
 ### 设计要点
