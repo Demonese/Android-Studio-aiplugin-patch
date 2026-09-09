@@ -219,11 +219,14 @@ pty4j ConPTY 后端、PowerShell 转义方案（EncodedCommand）均围绕它设
 上因路径/PTY/转换问题被整条链路刻意排除。aiplugin 内唯一的口径松动是权限层认识
 `pwsh` 而执行层不认识（执行层是最终裁决者）。
 
-## 5. 相关补丁/改造提示（与本项目关系）
+## 5. 相关补丁（已落地，见 docs/pwsh-support-design.md）
 
-- 若未来要支持 `pwsh`：createProcessArgs Windows 分支的 `"powershell"` 比较需扩展为
-  `powershell|pwsh`，并增加 `pwsh.exe` 的命令数组（`-EncodedCommand` 对二者等价）
-- 若要在 Windows 上放宽 shell 选择（如 git-bash），需同时处理：shell 路径探测、
+- **pwsh 优先支持**：Windows 上 `where.exe` 探测 PowerShell 7，可用则默认/显式
+  powershell 均走 `pwsh.exe -EncodedCommand`（行为层），工具描述同步标明
+  "PowerShell 7 (the default)"（文案层）。实现：新增 `WindowsShellResolver` +
+  ASM 注入 `RunShellCommandHandler.createProcessArgs`（3 处）与
+  `RunShellCommandTool.getToolDescription`（2 处）。
+- 若未来要在 Windows 上放宽 shell 选择（如 git-bash），需同时处理：shell 路径探测、
   MSYS2 路径转换、ConPTY 兼容性、`ShellDialect` 扩展、退出码语义表——工程量集中在
   `RunShellCommandHandler` 与 `RunShellCommandToolKt`，全部为插件内字节码可改点
-  （工具类为新增源码友好面），不涉及平台 jar
+  （工具类为新增源码友好面），不涉及平台 jar。

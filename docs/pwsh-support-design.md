@@ -299,17 +299,19 @@ iconst_0; ldc ...; aastore` 结构）。
 设计取舍：显式 `shell="powershell"` 时仍优先 pwsh（PowerShell 语义兼容，5.1/7 对
 `-EncodedCommand`/`-NonInteractive` 行为一致）；如未来需要"显式 5.1"可再引入开关。
 
-## 5. 文案层更新（可选，P2）
+## 5. 文案层更新（已实现，提交 0bcc5ed）
 
-`RunShellCommandTool` 的 ToolDescription/参数文案随 pwsh 支持更新（字节码 LDC 文本替换）：
+`RunShellCommandTool` 的 ToolDescription/参数文案随 pwsh 支持更新：
 
-- summary：`"Executes a shell command in PowerShell (the default) or cmd on Windows"` →
-  `"Executes a shell command in PowerShell 7 (pwsh) if available, otherwise Windows PowerShell (the default), or cmd on Windows"`
-- `getToolArgument("shell")`：`"either \"powershell\" (default) or \"cmd\""` →
-  `"either \"powershell\" (the default), \"pwsh\" (PowerShell 7) or \"cmd\""`
-- description 的 `powershell.exe -Command` 示例保持泛化说明
+- summary（isWindows 分支 LDC → `WindowsShellResolver.summaryForWindows()`）：
+  pwsh 可用 → `"Executes a shell command in PowerShell 7 (the default) or cmd on Windows"`；
+  否则保持原版 `"...PowerShell (the default) or cmd on Windows"`
+- description（isWindows 分支 LDC → `WindowsShellResolver.descriptionForWindows()`）：
+  pwsh 可用 → `"Executes as \`pwsh.exe -Command <command>\`. Supports background processes via \`Start-Process\` or \`Start-Job\`."`
+- `getToolArgument("shell")` 的 `"either \"powershell\" (default) or \"cmd\""` 保持原版
+  （未随本次改动；如需告知模型可传 `pwsh` 参数，可再扩一个 LDC 替换点）
 
-不影响功能，可随主补丁一并替换（同为 LDC 替换，PatchTool 增加几个 set 点)。
+已随主补丁落地：探测仍是一次性（resolver 进程级缓存），文案按探测结果二选一。
 
 ## 6. 构建与验证改动
 
@@ -404,16 +406,16 @@ verify 保持全绿。
 7. **可选 flag**：如需可控性，可仿 `StudioBotFlags`（isReplaceTextToolEnabled 模式）
    加 `runShellPreferPwsh`（默认 true）；本期默认开启，flag 接线列为 P2 增量
 
-## 8. 实施步骤（对齐项目阶段）
+## 8. 实施步骤（全部已完成）
 
-1. `src/main/java/.../execute/WindowsShellResolver.java`（第 3 节源码）
-2. `PatchTool`：+`case "winshell"` 与 `patchRunShellHandler`（第 4 节三注入点）
-3. `30_build_patch.sh`：新阶段 + 组装两项（第 6.2 节）
-4. `src/test/java/WindowsShellResolverTest.java`、`RunShellCommandWindowsArgTest.java`
-5. `40_verify.sh`：字节码校验 + 两个新环节（第 6.3 节）
-6. （P2）`RunShellCommandTool` 文案层 LDC 替换（第 5 节）
+1. `src/main/java/.../execute/WindowsShellResolver.java`（第 3 节源码）—— 完毕
+2. `PatchTool`：+`case "winshell"` 与 `patchRunShell`（行为层 3 注入点 + 文案层 2 处，第 4/5 节）—— 完毕
+3. `30_build_patch.sh`：新阶段 + 组装两项（第 6.2 节，现为阶段 11/12）—— 完毕
+4. `src/test/java/WindowsShellResolverTest.java`、`RunShellCommandWindowsArgTest.java` —— 完毕
+5. `40_verify.sh`：字节码校验 + 两个新环节（第 6.3 节，现为 [12/13][13/13]）—— 完毕
+6. `RunShellCommandTool` 文案层 LDC 替换（第 5 节）—— 完毕（提交 0bcc5ed）
 7. 回归：完整 `30_build_patch.sh` + `40_verify.sh`，确认无 pwsh 模拟下
-   （`setForTesting(false)`）行为与现状逐位一致
+   （`setForTesting(false)`）行为与现状逐位一致 —— 完毕；Windows 真机人工验证见第 9 节
 
 ## 9. 人工验证记录（Windows 真机，2026-09）
 

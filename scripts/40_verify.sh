@@ -13,6 +13,10 @@
 #      验证 load 加载存储值 / 厂商切换显隐联动 / 切换回写 live provider / 容错）
 #  11) ProviderApiTypePropagationTest：设置 -> computeState -> ModelApi 实例 端到端传播
 #      （按 provider 隔离、设置变更重算生效、AUTO 默认行为、固定协议分派/回退决策）
+#  12) WindowsShellResolverTest：pwsh 探测决议决策表（where.exe/别名/回退）、文案决议、
+#      非 Windows 环境失败回退路径
+#  13) RunShellCommandWindowsArgTest：run_shell_command Windows 分支命令数组矩阵（默认/
+#      显式 pwsh/cmd/不支持 shell、cmd wrapper、-NonInteractive、EncodedCommand 编码链路）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -32,7 +36,7 @@ mkdir -p "$TESTOUT"
 # IntelliJ 平台以反射访问 java.desktop 内部，需要模块开放
 AWT_OPENS="--add-opens java.desktop/javax.swing=ALL-UNNAMED --add-opens java.desktop/java.awt=ALL-UNNAMED"
 
-echo "[1/11] 字节码校验 (CheckClassAdapter) ..."
+echo "[1/13] 字节码校验 (CheckClassAdapter) ..."
 for c in \
   "com.android.studio.ml.modelproviders.data.ProviderData\$RemoteProviderData" \
   "com.android.studio.ml.backends.settings.RemoteModelProviderInfoPanel" \
@@ -54,53 +58,53 @@ for c in \
   echo "    ok: $c"
 done
 
-echo "[2/11] 序列化往返测试 ..."
+echo "[2/13] 序列化往返测试 ..."
 RT_CP="$DIST_JAR:$FULL:$PLIB:$KOTLIN_STDLIB"
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/SerializeTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" SerializeTest | grep -E "serialized|restored|default|copy|ok:|info:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" SerializeTest | grep -q ALL_OK || { echo "[!] SerializeTest 失败"; exit 1; }
 
-echo "[3/11] 协议选择与回退控制测试 ..."
+echo "[3/13] 协议选择与回退控制测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ApiProtocolTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ApiProtocolTest | grep -q ALL_OK || { echo "[!] ApiProtocolTest 失败"; exit 1; }
 
-echo "[4/11] Responses 思考回退补全测试 ..."
+echo "[4/13] Responses 思考回退补全测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ResponsesReasoningTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ResponsesReasoningTest | grep -q ALL_OK || { echo "[!] ResponsesReasoningTest 失败"; exit 1; }
 
-echo "[5/11] Chat Completions reasoning_content 回传测试 ..."
+echo "[5/13] Chat Completions reasoning_content 回传测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/CompletionReasoningTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" CompletionReasoningTest | grep -q ALL_OK || { echo "[!] CompletionReasoningTest 失败"; exit 1; }
 
-echo "[6/11] 思考强度下拉测试 ..."
+echo "[6/13] 思考强度下拉测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ThinkingEffortPickerTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ThinkingEffortPickerTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ThinkingEffortPickerTest | grep -q ALL_OK || { echo "[!] ThinkingEffortPickerTest 失败"; exit 1; }
 
-echo "[7/11] reasoningEffort 持久化测试 ..."
+echo "[7/13] reasoningEffort 持久化测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ReasoningEffortPersistTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortPersistTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortPersistTest | grep -q ALL_OK || { echo "[!] ReasoningEffortPersistTest 失败"; exit 1; }
 
-echo "[8/11] reasoning_effort/reasoning.effort 接入测试 ..."
+echo "[8/13] reasoning_effort/reasoning.effort 接入测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ReasoningEffortApiTest.java"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -E "ok:|FAILED|ALL_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" ReasoningEffortApiTest | grep -q ALL_OK || { echo "[!] ReasoningEffortApiTest 失败"; exit 1; }
 
-echo "[9/11] 设置界面与发送区布局校验 ..."
+echo "[9/13] 设置界面与发送区布局校验 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$ASMC:$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/UiLoadTest.java"
 java "$JAVA_ENC" -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -E "enum|  |ok:|FAILED|UI_CLASSES_LOAD_OK"
 java "$JAVA_ENC" -cp "$ASMC:$RT_CP:$TESTOUT" UiLoadTest | grep -q UI_CLASSES_LOAD_OK || { echo "[!] UiLoadTest 失败"; exit 1; }
 
-echo "[10/11] 协议下拉控件运行时行为测试（headless）..."
+echo "[10/13] 协议下拉控件运行时行为测试（headless）..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ApiProtocolUiBehaviorTest.java"
 java "$JAVA_ENC" -Djava.awt.headless=true $AWT_OPENS -cp "$RT_CP:$TESTOUT" ApiProtocolUiBehaviorTest | grep -E "ok:|FAILED|UI_BEHAVIOR_OK"
 java "$JAVA_ENC" -Djava.awt.headless=true $AWT_OPENS -cp "$RT_CP:$TESTOUT" ApiProtocolUiBehaviorTest | grep -q UI_BEHAVIOR_OK || { echo "[!] ApiProtocolUiBehaviorTest 失败"; exit 1; }
 
-echo "[11/11] 设置 -> computeState -> ModelApi 实例 端到端传播测试 ..."
+echo "[11/13] 设置 -> computeState -> ModelApi 实例 端到端传播测试 ..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ProviderApiTypePropagationTest.java"
 java "$JAVA_ENC" -Djava.awt.headless=true -cp "$RT_CP:$TESTOUT" ProviderApiTypePropagationTest | grep -E "ok:|FAILED|PROPAGATION_OK"
 java "$JAVA_ENC" -Djava.awt.headless=true -cp "$RT_CP:$TESTOUT" ProviderApiTypePropagationTest | grep -q PROPAGATION_OK || { echo "[!] ProviderApiTypePropagationTest 失败"; exit 1; }

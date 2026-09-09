@@ -25,6 +25,7 @@ Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该�
 2. Chat Completions API 系统消息 role：原实现在 `useSystemMessage=false`（agent 主路径硬编码）时发送 `developer` role，现在改成固定发送 `system` role，反正 OpenAI 官方仍然兼容。
 3. Chat Completions API：原实现不回传 assistant 消息的思考内容，现将已收到的 `thought` 用 `reasoning_content` 附加字段回传。（TODO：提供字段名设置界面，因为有些供应商不是这个字段）
 4. 思考强度：Agent 发送区模型选择与 Submit 之间新增思考强度选择，样式复用模型选择，挡位有 `none/minimal/low/medium/high/xhigh/max` 与 OpenAI 官方一致，按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort` 字段（旧对话默认 `medium`），并接入请求参数（供应商不接受时沿用原生自适应回退）。
+5. Windows 平台 `run_shell_command`：启动时以 `where.exe` 探测 PowerShell 7 (pwsh)，可用则默认/显式 powershell 均走 `pwsh.exe -EncodedCommand`，工具描述同步标明 "PowerShell 7 (the default)"；无 pwsh 时完全保持原行为（`powershell.exe` + 原文案）。
 
 此外还有针对吃白饭的大肥鱼 DeepSeek 的修复：
 
@@ -57,14 +58,19 @@ aiplugin-patch/
 │   │   └── com/google/studiobot/ui/querybox/
 │   │       ├── ThinkingEffortPicker.java
 │   │       └── ThinkingEffortStore.java
+│   │   └── com/google/aiplugin/agents/tools/execute/
+│   │       └── WindowsShellResolver.java
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具
 │   └── test/java/             # SerializeTest / ApiProtocolTest / ResponsesReasoningTest /
 │                              # CompletionReasoningTest / ThinkingEffortPickerTest /
 │                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest /
-│                              # ApiProtocolUiBehaviorTest / ProviderApiTypePropagationTest
+│                              # ApiProtocolUiBehaviorTest / ProviderApiTypePropagationTest /
+│                              # WindowsShellResolverTest / RunShellCommandWindowsArgTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
-│   └── patch-design.md        # 补丁设计、插入点、后端协议控制
+│   ├── patch-design.md        # 补丁设计、插入点、后端协议控制
+│   ├── powershell.md          # run_shell_command Windows 平台运行机制（逆向分析）
+│   └── pwsh-support-design.md # pwsh 优先补丁设计（探测/注入点/测试/人工验证记录）
 ├── work/                      # 构建中间产物（脚本生成）
 └── dist/                      # 输出：aiplugin-patched.jar
 ```

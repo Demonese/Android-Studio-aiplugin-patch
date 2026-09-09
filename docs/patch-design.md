@@ -37,7 +37,9 @@
 ├── OpenAiResponsesSupport   Responses 请求构造：缺失思考时补占位 reasoning item
 ├── OpenAiCompletionSupport  Chat Completions 请求构造：回传 reasoning_content
 ├── ThinkingEffortPicker     发送区思考强度下拉（复用 ModelPicker 渲染）
-└── ThinkingEffortStore      思考强度运行时存储 + 持久化钩子 + ReasoningEffort 映射
+├── ThinkingEffortStore      思考强度运行时存储 + 持久化钩子 + ReasoningEffort 映射
+└── WindowsShellResolver      Windows 平台 pwsh 探测（where.exe）+ shell 归一化 +
+                             按 pwsh 可用性的工具描述文案决议
 
 ASM 补丁（PatchTool.java）
 ├── ProviderData$RemoteProviderData
@@ -72,6 +74,13 @@ ASM 补丁（PatchTool.java）
 │   └── createParams：addDeveloperMessage 改写为 addSystemMessage；
 │                toReasoningEffort 调用替换为 ThinkingEffortStore.toOpenAiReasoningEffort()；
 │                reasoningEffort(NONE) 回退分支门控改为恒跳过
+├── RunShellCommandHandler
+│   └── createProcessArgs$aiplugin_agents_agents_core：Windows 分支接入
+│       WindowsShellResolver —— 默认 shell 换 defaultShellName()；shellArg 定稿后
+│       归一化 pwsh→powershell；powershell.exe 换 executable()（pwsh 优先）
+└── RunShellCommandTool
+    └── getToolDescription：isWindows 分支两处 LDC 换
+        summaryForWindows()/descriptionForWindows()（按 pwsh 可用性选文案）
 ├── QueryBoxKt.ActionsRow
 │   └── ModelPicker + 8dp Spacer 之后插入 ThinkingEffortPicker.render + 8dp Spacer
 ├── PersistedMetadata
@@ -92,7 +101,7 @@ ASM 补丁（PatchTool.java）
    `OpenAiApiTypeSupport` 调用 `OpenAiModelApi.getOpenAiApiType`，
    这些方法均由 ASM 阶段添加，因此必须先补丁数据类与 API 类、再编译新源码
    （见 30_build_patch.sh 的阶段顺序：data → api → metadata → javac →
-   panel → querybox → metaser → convmeta → orch → timeline → 组装）。
+   panel → querybox → metaser → convmeta → orch → timeline → winshell → 组装）。
 2. **面板私有状态用反射读**：回写设置需要面板的 `getCurrentProvider`（private
    `Function0<ProviderDetails>`）。反射优先读 private 字段（字段名是稳定 API），
    取不到时退回 Kotlin synthetic 访问器 `access$getGetCurrentProvider$p`；
@@ -156,7 +165,7 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 
 ## 验证（scripts/40_verify.sh）
 
-1. `CheckClassAdapter`：13 个被补丁类的字节码合法性（含类型分析）。
+1. `CheckClassAdapter`：15 个被补丁类的字节码合法性（含类型分析）。
 2. `SerializeTest`：真实平台 jar 上运行 `XmlSerializer` 往返：
    序列化出现 `openAiApiType` option；反序列化还原；构造默认 AUTO；
    `copy()` 与 `copy(4参)` 保留字段；equals/hashCode 感知字段。
@@ -188,6 +197,13 @@ xmlb 序列化含 `openAiApiType` option → 写入 `ai.providers.xml` → 重�
 11. `ProviderApiTypePropagationTest`：设置 → `computeState()` → `OpenAiModelApi`
     实例端到端传播：按 provider 隔离、设置变更后重算生效、AUTO 默认行为不变、
     固定协议强制分派与禁用回退、旧配置（无协议字段）实例默认 AUTO。
+12. `WindowsShellResolverTest`：pwsh 探测决议决策表（where.exe 真实路径/别名 shim 剔除/
+    仅别名时执行验证/空列表回退）、归一化与文案决议（pwsh 可用与否两态）、非 Windows
+    环境失败回退路径。
+13. `RunShellCommandWindowsArgTest`：以 `isWindows=true` 直呼补丁后
+    `createProcessArgs$aiplugin_agents_agents_core` 的命令数组矩阵（默认/显式 pwsh/
+    powershell/cmd/不支持 shell、cmd wrapper、`-NonInteractive`、`-EncodedCommand`
+    Base64(UTF-16LE) 编码链路、无 pwsh 回退、Unix 分支回归）。
 
 ## 安装与测试
 

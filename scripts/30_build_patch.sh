@@ -16,7 +16,9 @@
 #   阶段8  ASM 补丁 DefaultConversation.prepareMetadata：保存回填
 #   阶段9  ASM 补丁 ActiveConversationOrchestrator：会话切换刷新
 #   阶段10 ASM 补丁 TrajectoryTimelineController：会话呈现同步
-#   阶段11 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
+#   阶段11 ASM 补丁 RunShellCommandHandler/RunShellCommandTool：Windows 平台 pwsh 优先
+#          （where.exe 探测，默认/显式 powershell 走 pwsh.exe）与按 pwsh 可用性的动态文案
+#   阶段12 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -32,19 +34,19 @@ PLAT="$(platform_cp)"
 PLIB="$(plugin_lib_cp)"
 FULL="$(full_lib_cp)"
 
-echo "[1/12] 编译 ASM 补丁工具 PatchTool ..."
+echo "[1/13] 编译 ASM 补丁工具 PatchTool ..."
 javac -cp "$ASMC" -d "$WORK/tools-out" "$PROJ/src/patcher/java/PatchTool.java"
 
-echo "[2/12] 阶段1：补丁 RemoteProviderData（加字段与访问器）..."
+echo "[2/13] 阶段1：补丁 RemoteProviderData（加字段与访问器）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool data "$WORK/classes-orig" "$PATCHED"
 
-echo "[3/12] 阶段2：补丁 OpenAiModelApi 等（协议选择、回退控制、思考强度接入）..."
+echo "[3/13] 阶段2：补丁 OpenAiModelApi 等（协议选择、回退控制、思考强度接入）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool api "$WORK/classes-orig" "$PATCHED"
 
-echo "[4/12] 阶段3：补丁 PersistedMetadata（reasoningEffort 字段与写出）..."
+echo "[4/13] 阶段3：补丁 PersistedMetadata（reasoningEffort 字段与写出）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool metadata "$WORK/classes-orig" "$PATCHED"
 
-echo "[5/12] 阶段4：编译新增源码（OpenAiApiType/Converter/Ui/Support/ThinkingEffortPicker）..."
+echo "[5/13] 阶段4：编译新增源码（OpenAiApiType/Converter/Ui/Support/ThinkingEffortPicker/WindowsShellResolver）..."
 javac --release "$JAVA_RELEASE" -nowarn \
   -cp "$PATCHED:$PLUGIN_JAR:$PLAT:$PLIB" \
   -d "$OUT" $(find "$PROJ/src/main/java" -name "*.java")
