@@ -327,28 +327,64 @@ iconst_0; ldc ...; aastore` 结构）。
   - `-C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class"`
   - `-C "$OUT" "com/google/aiplugin/agents/tools/execute/WindowsShellResolver.class"`
 
-### 6.3 `scripts/40_verify.sh`
+### 6.3 `scripts/40_verify.sh` 与 Linux 测试方案
 
-- CheckClassAdapter 列表增加 `RunShellCommandHandler`
-- 新环节 [12/13]（顺序编号顺延）WindowsShellResolverTest：
-  - 纯单元（不依赖补丁 jar）：探测默认（Linux 上无 pwsh → false）、
-    `setForTesting(true/false)` 注入后 default/exe 决议、normalizeShell 幂等与大小写
-- 新环节 [13/13] RunShellCommandWindowsArgTest：
-  - 以补丁 jar 为 classpath（现有 RT_CP 模式），headless 运行
-  - 构造：`new RunShellCommandHandler(proxyContext, new RunShellCommandArgs(...))`，
-    ToolContext 用 JDK 动态代理（createProcessArgs 不触碰 context，代理方法返回 null
-    即可）；suspend 函数经 `createProcessArgs$aiplugin_agents_agents_core(cli, null,
-    usePty, false, true, cont)` 调用，`Continuation.resumeWith` 收集结果
-    （内层 `withContext(IO)` 挂起时等待恢复；`resolveShellPath=false` 避免路径探测）
-  - 断言（`setForTesting(true)` 前置）：
-    - `shell=""` → `[0] == "pwsh.exe"`，含 `-EncodedCommand`，末项 Base64(UTF-16LE(command)) 解码等于命令
-    - `shell="pwsh"` → 同左（归一化生效）
-    - `shell="powershell"` → `[0] == "pwsh.exe"`
-    - `shell="cmd"` → `["cmd.exe","/c",command]`
-    - `shell="bash"` → 返回 Pair 第二项为错误 Response（含 "not supported on Windows"）
-    - `cli="cmd /c dir"` + `shell="powershell"` → `["cmd.exe","/c","dir"]`（cmd wrapper 仍工作）
-    - `usePty=false` → 参数含 `-NonInteractive`
-    - `setForTesting(false)` 后：`shell=""` → `[0] == "powershell.exe"`（回退=现状）
+开发/CI 环境是 Ubuntu，本补丁在 Linux 上**高度可测**，依据：
+
+1. `createProcessArgs$aiplugin_agents_agents_core` 的 `isWindows` 是**显式参数**（
+   `(cli, tempFile, usePty, resolveShellPath, isWindows, cont)`），Windows 分支可不经
+   Windows 系统直接以 `isWindows=true` 调用验证；
+2. `WindowsShellResolver` 探测逻辑拆成纯函数（`decide(hits)`）＋可注入
+   （`setForTesting`），决策表全分支在 Linux 可测；
+3. 行为测试对补丁 jar 编译运行（既有 RT_CP 模式），跑的是补丁后真实字节码。
+
+测试分四层：
+
+**L1 结构层**（`WindowsShellPatchStructureTest.java`，仿 UiLoadTest 的 ASM 读法）：
+- 补丁后 `RunShellCommandHandler` 不再含 `LDC "powershell.exe"`；
+- 存在 `INVOKESTATIC defaultShellName` 且位于 `ILOAD 5(＝isWindows) → IFEQ` 分支内；
+- 存在 `INVOKESTATIC normalizeShell` 且位置在 `ASTORE 8` 之后、第一次
+  `LDC "powershell"`（redirect 判定）之前（保证归一化覆盖所有下游使用点）；
+- 存在 `INVOKESTATIC executable` 且位于 `ANEWARRAY String` 之后（powershell 数组上下文）。
+
+**L2 单元层**（`WindowsShellResolverTest.java`）：
+- `decide(hits)` 纯函数全表：真实路径 → true；混合（真实+别名）→ true；仅
+  WindowsApps 别名 → 走 verify（Linux 上路径不存在 → false，顺便真实覆盖“未装 shim”
+  回退）；空 → false；
+- `where()` 真实调用：Linux 上 `where.exe` 不存在 → IOException → 空列表（“探测失败
+  回退”路径真实验证）；
+- `verifyExecutable(不存在路径)` → false（异常兜底）；
+- `setForTesting(true/false/null)` 决议 + `normalizeShell` 幂等/大小写（`PwSh`→powershell）。
+
+**L3 行为层**（`RunShellCommandWindowsArgTest.java`）：
+- 构造：`ToolContext` 用 JDK 动态代理（createProcessArgs 不触碰 context，代理方法
+  永不触发）＋ `new RunShellCommandHandler(ctx, new RunShellCommandArgs(...))`；
+- suspend 调用：`createProcessArgs$aiplugin_agents_agents_core(cli, null, usePty, false,
+  true, cont)`；`resolveShellPath=false` 无挂起点直接返回 Pair，Continuation +
+  COROUTINE_SUSPENDED 检测＋CountDownLatch 兜底；
+- 断言矩阵（`setForTesting(true)` 前置，见下文表）；
+- 额外两条纯 Java 断言：① `-EncodedCommand` 参数 Base64(UTF-16LE) 解码等于原始 cli
+  （编码链路验证，跨平台）；② `setForTesting(false)` ＋ `isWindows=false` 回归比对
+  （补丁后 Unix 分支仍产出 `/bin/`+`/usr/bin/` bash 数组，证明未碰坏非 Windows 路径）。
+
+| # | shell | cli | usePty | 期望 |
+|---|---|---|---|---|
+| 1 | `""`（缺省） | `Write-Host hi` | true | `[pwsh.exe, -EncodedCommand, B64]` |
+| 2 | `"pwsh"` | 同上 | true | 同左（归一化生效） |
+| 3 | `"powershell"` | 同上 | true | `[pwsh.exe, ...]`（pwsh 优先） |
+| 4 | `"cmd"` | `dir` | true | `[cmd.exe, /c, dir]` |
+| 5 | `"bash"` | 任意 | true | error 含 `"not supported on Windows"` |
+| 6 | `"powershell"` | `cmd /c dir` | true | `[cmd.exe, /c, dir]`（cmd wrapper 仍在） |
+| 7 | `""` | 任意 | false | 含 `-NonInteractive` |
+| 8 | `setForTesting(false)`＋`""` | 任意 | true | `[powershell.exe, ...]`（回退＝现状） |
+
+**L4 回归层**：40_verify.sh 现有 11 步全量保持；新增 [12/13][13/13] 两个环节（编号
+顺延），CheckClassAdapter 列表加 `RunShellCommandHandler`。
+
+**可选增强**：Ubuntu 装 Microsoft 官方 Linux 版 pwsh 做 skip-if-absent 冒烟——若
+`where("pwsh")` 命中，真实执行 `pwsh -EncodedCommand <B64>` 验证编码通道
+（pwsh 的 `-EncodedCommand`/`-NonInteractive` 为跨平台行为）；未安装则 SKIP，
+verify 保持全绿。
 
 ## 7. 风险与边界
 
