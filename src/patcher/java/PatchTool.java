@@ -39,6 +39,8 @@ public class PatchTool {
     static final String TTC = "com/google/studiobot/controller/TrajectoryTimelineController";
     static final String EVENT_PRESENTED = "com/google/studiobot/ui/TrajectoryEvent$ConversationPresented";
     static final String STORE = "com/google/studiobot/ui/querybox/ThinkingEffortStore";
+    static final String SHELL_HANDLER = "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler";
+    static final String SHELL_RESOLVER = "com/google/aiplugin/agents/tools/execute/WindowsShellResolver";
     static final String KX_DESC = "kotlinx/serialization/descriptors/SerialDescriptor";
     static final String KX_ENCODER = "kotlinx/serialization/encoding/CompositeEncoder";
     static final String KX_DECODER = "kotlinx/serialization/encoding/CompositeDecoder";
@@ -59,6 +61,7 @@ public class PatchTool {
             case "convmeta": patchPrepareMetadata(args[1], args[2]); break;
             case "orch": patchOrchestrator(args[1], args[2]); break;
             case "timeline": patchTimelineController(args[1], args[2]); break;
+            case "winshell": patchRunShellHandler(args[1], args[2]); break;
             default: throw new IllegalArgumentException(cmd);
         }
     }
@@ -992,5 +995,67 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, TTC, cw.toByteArray());
         System.out.println("patched " + TTC);
+    }
+
+    // RunShellCommandHandler.createProcessArgs$aiplugin_agents_agents_core 的 Windows 分支
+    // 接入 WindowsShellResolver，使环境存在 PowerShell 7 (pwsh) 时优先使用：
+    //   A) 默认 shell 的 LDC "powershell"（isWindows ? "powershell" : "bash" 分支）
+    //      → WindowsShellResolver.defaultShellName()（"pwsh" 或 "powershell"）
+    //   B) shellArg 定稿（ASTORE）后插入归一化 "pwsh"→"powershell"，让下游
+    //      redirect / effectiveShell / cmd-wrapper / 错误信息全部分支复用
+    //   C) LDC "powershell.exe"（powershell 编码分支）→ WindowsShellResolver.executable()
+    // 无新分支、无新栈帧（B 为直线代码，A/C 为指令替换），COMPUTE_MAXS 即可。
+    static void patchRunShellHandler(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, SHELL_HANDLER)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "createProcessArgs$aiplugin_agents_agents_core",
+                "(Ljava/lang/String;Ljava/io/File;ZZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;");
+
+        // A) 默认 shell：LDC "powershell" 且前驱为 IFEQ（isWindows 分支）、后继为 GOTO
+        //    （方法内另两处 LDC "powershell" 前驱/后继不满足，天然唯一）
+        AbstractInsnNode defaultLdc = null;
+        for (AbstractInsnNode n = m.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == LDC && n instanceof LdcInsnNode
+                    && "powershell".equals(((LdcInsnNode) n).cst)
+                    && n.getPrevious() != null && n.getPrevious().getOpcode() == IFEQ
+                    && n.getNext() != null && n.getNext().getOpcode() == GOTO) {
+                defaultLdc = n;
+                break;
+            }
+        }
+        if (defaultLdc == null) throw new IllegalStateException("default powershell LDC (isWindows branch) not found");
+
+        // B) shellArg 归一化：A 之后第一个 ASTORE（getShell 汇合的 shellArg 定稿点），
+        //    在其后插入 normalizeShell 直线代码（slot 自适应）。
+        //    注意：必须在替换 A 之前遍历（set() 后旧节点脱离指令链，getNext() 失效）
+        AbstractInsnNode store = null;
+        for (AbstractInsnNode n = defaultLdc.getNext(); n != null; n = n.getNext()) {
+            if (n.getOpcode() == ASTORE) {
+                store = n;
+                break;
+            }
+        }
+        if (store == null) throw new IllegalStateException("shellArg astore after default LDC not found");
+        int slot = ((VarInsnNode) store).var;
+        InsnList norm = new InsnList();
+        norm.add(new VarInsnNode(ALOAD, slot));
+        norm.add(new MethodInsnNode(INVOKESTATIC, SHELL_RESOLVER, "normalizeShell", "(Ljava/lang/String;)Ljava/lang/String;", false));
+        norm.add(new VarInsnNode(ASTORE, slot));
+        m.instructions.insert(store, norm);
+
+        // A) 默认 shell：LDC "powershell" 且前驱为 IFEQ（isWindows 分支）、后继为 GOTO
+        //    （方法内另两处 LDC "powershell" 前驱/后继不满足，天然唯一）
+        m.instructions.set(defaultLdc, new MethodInsnNode(INVOKESTATIC, SHELL_RESOLVER, "defaultShellName", "()Ljava/lang/String;", false));
+
+        // C) 可执行文件：方法内唯一 LDC "powershell.exe"（powershell 编码分支的数组元素）
+        AbstractInsnNode exeLdc = findLdc(m, "powershell.exe");
+        m.instructions.set(exeLdc, new MethodInsnNode(INVOKESTATIC, SHELL_RESOLVER, "executable", "()Ljava/lang/String;", false));
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, SHELL_HANDLER, cw.toByteArray());
+        System.out.println("patched " + SHELL_HANDLER);
     }
 }

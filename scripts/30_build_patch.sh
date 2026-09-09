@@ -49,25 +49,28 @@ javac --release "$JAVA_RELEASE" -nowarn \
   -cp "$PATCHED:$PLUGIN_JAR:$PLAT:$PLIB" \
   -d "$OUT" $(find "$PROJ/src/main/java" -name "*.java")
 
-echo "[6/12] 阶段5：补丁 RemoteModelProviderInfoPanel（UI 注入）..."
+echo "[6/13] 阶段5：补丁 RemoteModelProviderInfoPanel（UI 注入）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool panel "$WORK/classes-orig" "$PATCHED"
 
-echo "[7/12] 阶段6：补丁 QueryBoxKt（发送区插入思考强度下拉）..."
+echo "[7/13] 阶段6：补丁 QueryBoxKt（发送区插入思考强度下拉）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool querybox "$WORK/classes-orig" "$PATCHED"
 
-echo "[8/12] 阶段7：补丁 PersistedMetadata\$\$serializer（descriptor 与读取）..."
+echo "[8/13] 阶段7：补丁 PersistedMetadata\$\$serializer（descriptor 与读取）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool metaser "$WORK/classes-orig" "$PATCHED" "$PATCHED:$OUT:$PLUGIN_JAR:$PLAT:$PLIB:$FULL"
 
-echo "[9/12] 阶段8：补丁 DefaultConversation.prepareMetadata（保存回填）..."
+echo "[9/13] 阶段8：补丁 DefaultConversation.prepareMetadata（保存回填）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool convmeta "$WORK/classes-orig" "$PATCHED"
 
-echo "[10/12] 阶段9：补丁 ActiveConversationOrchestrator（会话切换刷新）..."
+echo "[10/13] 阶段9：补丁 ActiveConversationOrchestrator（会话切换刷新）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool orch "$WORK/classes-orig" "$PATCHED"
 
-echo "[11/12] 阶段10：补丁 TrajectoryTimelineController（会话呈现同步）..."
+echo "[11/13] 阶段10：补丁 TrajectoryTimelineController（会话呈现同步）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool timeline "$WORK/classes-orig" "$PATCHED"
 
-echo "[12/12] 阶段11：组装 $DIST/aiplugin-patched.jar ..."
+echo "[12/13] 阶段11：补丁 RunShellCommandHandler（Windows 平台 pwsh 优先）..."
+java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool winshell "$WORK/classes-orig" "$PATCHED"
+
+echo "[13/13] 阶段12：组装 $DIST/aiplugin-patched.jar ..."
 cp "$PLUGIN_JAR" "$DIST/aiplugin-patched.jar"
 jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/android/studio/ml/modelproviders/data/ProviderData\$RemoteProviderData.class" \
@@ -83,6 +86,8 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/google/studiobot/agentsdk/conversations/DefaultConversation.class" \
   -C "$PATCHED" "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
   -C "$PATCHED" "com/google/studiobot/controller/TrajectoryTimelineController.class" \
+  -C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class" \
+  -C "$OUT" "com/google/aiplugin/agents/tools/execute/WindowsShellResolver.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiType.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiTypeConverter.class" \
   -C "$OUT" "com/android/studio/ml/backends/settings/OpenAiApiTypeUi.class" \

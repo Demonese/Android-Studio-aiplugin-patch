@@ -51,6 +51,7 @@ unzip -o -q "$WORK/as/plugin/aiplugin.jar" \
   "com/google/studiobot/agentsdk/conversations/DefaultConversation.class" \
   "com/google/studiobot/controller/ActiveConversationOrchestrator.class" \
   "com/google/studiobot/controller/TrajectoryTimelineController.class" \
+  "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class" \
   -d "$WORK/classes-orig"
 
 echo "== 提取完成 =="

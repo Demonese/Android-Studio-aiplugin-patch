@@ -46,7 +46,8 @@ for c in \
   "com.google.studiobot.agentsdk.conversations.PersistedMetadata\$\$serializer" \
   "com.google.studiobot.agentsdk.conversations.DefaultConversation" \
   "com.google.studiobot.controller.ActiveConversationOrchestrator" \
-  "com.google.studiobot.controller.TrajectoryTimelineController"; do
+  "com.google.studiobot.controller.TrajectoryTimelineController" \
+  "com.google.aiplugin.agents.tools.execute.RunShellCommandHandler"; do
   java "$JAVA_ENC" -cp "$ASMC:$DIST_JAR:$PLUGIN_JAR:$PLAT:$PLIB:$FULL:$WORK/out" \
     org.objectweb.asm.util.CheckClassAdapter "$c"
   echo "    ok: $c"
@@ -102,5 +103,15 @@ echo "[11/11] 设置 -> computeState -> ModelApi 实例 端到端传播测试 ..
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/ProviderApiTypePropagationTest.java"
 java "$JAVA_ENC" -Djava.awt.headless=true -cp "$RT_CP:$TESTOUT" ProviderApiTypePropagationTest | grep -E "ok:|FAILED|PROPAGATION_OK"
 java "$JAVA_ENC" -Djava.awt.headless=true -cp "$RT_CP:$TESTOUT" ProviderApiTypePropagationTest | grep -q PROPAGATION_OK || { echo "[!] ProviderApiTypePropagationTest 失败"; exit 1; }
+
+echo "[12/13] WindowsShellResolver 单元测试 ..."
+javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/WindowsShellResolverTest.java"
+java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" WindowsShellResolverTest | grep -E "ok:|FAILED|RESOLVER_OK"
+java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" WindowsShellResolverTest | grep -q RESOLVER_OK || { echo "[!] WindowsShellResolverTest 失败"; exit 1; }
+
+echo "[13/13] run_shell_command Windows 分支行为测试 ..."
+javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/RunShellCommandWindowsArgTest.java"
+java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" RunShellCommandWindowsArgTest | grep -E "ok:|FAILED|WINDOWS_ARG_OK"
+java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" RunShellCommandWindowsArgTest | grep -q WINDOWS_ARG_OK || { echo "[!] RunShellCommandWindowsArgTest 失败"; exit 1; }
 
 echo "== 全部验证通过 =="
