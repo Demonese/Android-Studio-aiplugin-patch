@@ -414,3 +414,18 @@ verify 保持全绿。
 6. （P2）`RunShellCommandTool` 文案层 LDC 替换（第 5 节）
 7. 回归：完整 `30_build_patch.sh` + `40_verify.sh`，确认无 pwsh 模拟下
    （`setForTesting(false)`）行为与现状逐位一致
+
+## 9. 人工验证记录（Windows 真机，2026-09）
+
+环境：Windows 11 专业版 10.0.26200 x64，已装 PowerShell 7.6.5（`C:\Program Files\PowerShell\7\pwsh.exe`）。
+验证产物：`dist/aiplugin-patched.jar`（提交 0bcc5ed 后版本）。
+
+| 项目 | 实测 | 结论 |
+|---|---|---|
+| 缺省 shell（shell 空） | `(Get-Process -Id $PID).Path` → `pwsh.exe`；`$PSVersionTable` 7.6.5 Core | ✅ pwsh 优先生效 |
+| `shell="cmd"` | `cmd.exe`，`%COMSPEC%`/`ver` 正常 | ✅ cmd 分支未破坏 |
+| 每次调用 | 不同 PID（30264/25700）→ 无会话持久化 | ✅ 符合设计 |
+| 沙箱 | `isSandboxed: false` | ✅ Windows 无原生沙箱 |
+| 文案层 | 模型原样引用的定义含 `PowerShell 7 (the default)` 与 `pwsh.exe -Command` | ✅ summaryForWindows/descriptionForWindows 生效 |
+
+未覆盖：无 pwsh 真机场景（回退路径由 `setForTesting(false)` 测试注入覆盖，行为与补丁前一致）。
