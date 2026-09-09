@@ -381,7 +381,7 @@ iconst_0; ldc ...; aastore` 结构）。
 | 1 | `""`（缺省） | `Write-Host hi` | true | `[pwsh.exe, -EncodedCommand, B64]` |
 | 2 | `"pwsh"` | 同上 | true | 同左（归一化生效） |
 | 3 | `"powershell"` | 同上 | true | `[pwsh.exe, ...]`（pwsh 优先） |
-| 4 | `"cmd"` | `dir` | true | `[cmd.exe, /c, dir]` |
+| 4 | `"cmd"` | `dir` | true | `[cmd.exe, /c, dir < NUL]`（非交互时 cmd 分支附带 ` < NUL` 重定向） |
 | 5 | `"bash"` | 任意 | true | error 含 `"not supported on Windows"` |
 | 6 | `"powershell"` | `cmd /c dir` | true | `[cmd.exe, /c, dir]`（cmd wrapper 仍在） |
 | 7 | `""` | 任意 | false | 含 `-NonInteractive` |

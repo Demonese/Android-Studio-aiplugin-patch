@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  * 仅 Windows 使用；非 Windows 恒返回 powershell 家族现状。
  */
 public final class WindowsShellResolver {
-    /** 加速用 fast-path（标准安装直接命中，省一次子进程；不作为判定依据） */
+    /** 加速用 fast-path（标准安装直连命中，判定 pwsh 可用，省一次子进程） */
     private static final String[] FAST_PATHS = {
             "%ProgramFiles%\\PowerShell\\7\\pwsh.exe",
             "%ProgramFiles(x86)%\\PowerShell\\7\\pwsh.exe",

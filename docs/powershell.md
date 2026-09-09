@@ -55,7 +55,9 @@ if (effectiveShell != "powershell" && effectiveShell != "cmd")
     return Response.error("Shell '" + shellArg + "' is not supported on Windows");
 ```
 
-**powershell 路径（默认）**：
+**powershell 路径（默认）**（以下为原版机制；pwsh 补丁落地后 Windows 默认/显式
+powershell 由 `WindowsShellResolver` 决议为 `pwsh.exe`（探测到 PowerShell 7 时），
+见第 5 节与 `docs/pwsh-support-design.md`）：
 
 ```
 ["powershell.exe", ("-NonInteractive" 仅当 !usePty),
