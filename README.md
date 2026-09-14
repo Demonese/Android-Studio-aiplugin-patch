@@ -26,7 +26,8 @@ Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该�
 3. Chat Completions API：原实现不回传 assistant 消息的思考内容，现将已收到的 `thought` 用 `reasoning_content` 附加字段回传。（TODO：提供字段名设置界面，因为有些供应商不是这个字段）
 4. 思考强度：Agent 发送区模型选择与 Submit 之间新增思考强度选择，样式复用模型选择，挡位有 `none/minimal/low/medium/high/xhigh/max` 与 OpenAI 官方一致，按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort` 字段（旧对话默认 `medium`），并接入请求参数（供应商不接受时沿用原生自适应回退）。
 5. Windows 平台 `run_shell_command`：启动时以 `where.exe` 探测 PowerShell 7 (pwsh)，可用则默认/显式 powershell 均走 `pwsh.exe -EncodedCommand`，工具描述同步标明 "PowerShell 7 (the default)"；无 pwsh 时完全保持原行为（`powershell.exe` + 原文案）。
-6. Available Models 表格工具栏新增 "Add Model" `+` 按钮（官方同款 `addExtraAction`，与左侧 Model Providers 列表的 `+` 同风格），随当前选中 provider 启用/禁用；添加对话框尚未实现（功能后续接入，当前点击弹提示）。
+6. Available Models 表格工具栏新增 "Add Model" `+` 按钮（官方同款 `addExtraAction`，与左侧 Model Providers 列表的 `+` 同风格），随当前选中 provider 启用/禁用；点击弹出 "Enter model ID" 输入框（对照官方 "Add Command Prefix"），回车后按 identifier 去重追加自定义模型（`enabled=true`、token limits=`-1` 运行时回退硬编码表）并刷新表格，随 Apply/OK 持久化到 `ai.providers.xml`。
+   同时 `Companion.updateModelList` 被替换为 `mergeModelList`：手动 Refresh 保留孤儿条目（手动添加/已下架模型不再被抹掉，对齐后台自动刷新语义）；Refresh 失败时列表原样保留（修复原实现失败后整表清空的缺陷）。
 
 此外还有针对吃白饭的大肥鱼 DeepSeek 的修复：
 
@@ -68,7 +69,8 @@ aiplugin-patch/
 │                              # CompletionReasoningTest / ThinkingEffortPickerTest /
 │                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest /
 │                              # ApiProtocolUiBehaviorTest / ProviderApiTypePropagationTest /
-│                              # WindowsShellResolverTest / RunShellCommandWindowsArgTest
+│                              # WindowsShellResolverTest / RunShellCommandWindowsArgTest /
+                              # AvailableModelsToolbarTest / MergeModelListTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
 │   ├── patch-design.md        # 补丁设计、插入点、后端协议控制

@@ -20,7 +20,11 @@
 #          （where.exe 探测，默认/显式 powershell 走 pwsh.exe）与按 pwsh 可用性的动态文案
 #   阶段13 ASM 补丁 ModelInformationTablePanel.setupUi：Available Models 表格工具栏挂
 #          AvailableModelsToolbarSupport 的 "Add Model" "+" 按钮（官方同款 addExtraAction）
-#   阶段14 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
+#   阶段14 ASM 补丁 ModelInformationTablePanel$Companion.updateModelList：
+#          方法体前置早退替换为 mergeModelList —— 手动 Refresh 保留孤儿条目
+#          （对齐自动刷新语义，手动添加的自定义模型不再被抹掉）；
+#          Refresh 失败（fetched 为空）时列表原样保留（修复原实现整表清空缺陷）
+#   阶段15 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -36,48 +40,51 @@ PLAT="$(platform_cp)"
 PLIB="$(plugin_lib_cp)"
 FULL="$(full_lib_cp)"
 
-echo "[1/14] 编译 ASM 补丁工具 PatchTool ..."
+echo "[1/15] 编译 ASM 补丁工具 PatchTool ..."
 javac -cp "$ASMC" -d "$WORK/tools-out" "$PROJ/src/patcher/java/PatchTool.java"
 
-echo "[2/14] 阶段1：补丁 RemoteProviderData（加字段与访问器）..."
+echo "[2/15] 阶段1：补丁 RemoteProviderData（加字段与访问器）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool data "$WORK/classes-orig" "$PATCHED"
 
-echo "[3/14] 阶段2：补丁 OpenAiModelApi 等（协议选择、回退控制、思考强度接入）..."
+echo "[3/15] 阶段2：补丁 OpenAiModelApi 等（协议选择、回退控制、思考强度接入）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool api "$WORK/classes-orig" "$PATCHED"
 
-echo "[4/14] 阶段3：补丁 PersistedMetadata（reasoningEffort 字段与写出）..."
+echo "[4/15] 阶段3：补丁 PersistedMetadata（reasoningEffort 字段与写出）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool metadata "$WORK/classes-orig" "$PATCHED"
 
-echo "[5/14] 阶段4：编译新增源码（OpenAiApiType/Converter/Ui/Support/ThinkingEffortPicker/WindowsShellResolver/AvailableModelsToolbarSupport）..."
+echo "[5/15] 阶段4：编译新增源码（OpenAiApiType/Converter/Ui/Support/ThinkingEffortPicker/WindowsShellResolver/AvailableModelsToolbarSupport）..."
 javac --release "$JAVA_RELEASE" -nowarn \
   -cp "$PATCHED:$PLUGIN_JAR:$PLAT:$PLIB" \
   -d "$OUT" $(find "$PROJ/src/main/java" -name "*.java")
 
-echo "[6/14] 阶段5：补丁 RemoteModelProviderInfoPanel（UI 注入）..."
+echo "[6/15] 阶段5：补丁 RemoteModelProviderInfoPanel（UI 注入）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool panel "$WORK/classes-orig" "$PATCHED"
 
-echo "[7/14] 阶段6：补丁 QueryBoxKt（发送区插入思考强度下拉）..."
+echo "[7/15] 阶段6：补丁 QueryBoxKt（发送区插入思考强度下拉）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool querybox "$WORK/classes-orig" "$PATCHED"
 
-echo "[8/14] 阶段7：补丁 PersistedMetadata\$\$serializer（descriptor 与读取）..."
+echo "[8/15] 阶段7：补丁 PersistedMetadata\$\$serializer（descriptor 与读取）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool metaser "$WORK/classes-orig" "$PATCHED" "$PATCHED:$OUT:$PLUGIN_JAR:$PLAT:$PLIB:$FULL"
 
-echo "[9/14] 阶段8：补丁 DefaultConversation.prepareMetadata（保存回填）..."
+echo "[9/15] 阶段8：补丁 DefaultConversation.prepareMetadata（保存回填）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool convmeta "$WORK/classes-orig" "$PATCHED"
 
-echo "[10/13] 阶段9：补丁 ActiveConversationOrchestrator（会话切换刷新）..."
+echo "[10/15] 阶段9：补丁 ActiveConversationOrchestrator（会话切换刷新）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool orch "$WORK/classes-orig" "$PATCHED"
 
-echo "[11/13] 阶段10：补丁 TrajectoryTimelineController（会话呈现同步）..."
+echo "[11/15] 阶段10：补丁 TrajectoryTimelineController（会话呈现同步）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool timeline "$WORK/classes-orig" "$PATCHED"
 
-echo "[12/14] 阶段11：补丁 RunShellCommandHandler/RunShellCommandTool（pwsh 优先 + 动态文案）..."
+echo "[12/15] 阶段11：补丁 RunShellCommandHandler/RunShellCommandTool（pwsh 优先 + 动态文案）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool winshell "$WORK/classes-orig" "$PATCHED"
 
-echo "[13/14] 阶段13：补丁 ModelInformationTablePanel（Available Models 工具栏 + 按钮）..."
+echo "[13/15] 阶段13：补丁 ModelInformationTablePanel（Available Models 工具栏 + 按钮）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool modelstable "$WORK/classes-orig" "$PATCHED"
 
-echo "[14/14] 阶段14：组装 $DIST/aiplugin-patched.jar ..."
+echo "[14/15] 阶段14：补丁 ModelInformationTablePanel\$Companion（updateModelList → mergeModelList）..."
+java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool modelsmerge "$WORK/classes-orig" "$PATCHED"
+
+echo "[15/15] 阶段15：组装 $DIST/aiplugin-patched.jar ..."
 cp "$PLUGIN_JAR" "$DIST/aiplugin-patched.jar"
 jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/android/studio/ml/modelproviders/data/ProviderData\$RemoteProviderData.class" \
@@ -96,6 +103,7 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler.class" \
   -C "$PATCHED" "com/google/aiplugin/agents/tools/execute/RunShellCommandTool.class" \
   -C "$PATCHED" "com/android/studio/ml/modelproviders/providerinfo/ModelInformationTablePanel.class" \
+  -C "$PATCHED" "com/android/studio/ml/modelproviders/providerinfo/ModelInformationTablePanel\$Companion.class" \
   -C "$OUT" "com/google/aiplugin/agents/tools/execute/WindowsShellResolver.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiType.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/data/OpenAiApiTypeConverter.class" \

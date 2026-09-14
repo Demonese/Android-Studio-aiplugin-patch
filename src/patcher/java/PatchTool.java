@@ -43,6 +43,7 @@ public class PatchTool {
     static final String SHELL_TOOL = "com/google/aiplugin/agents/tools/execute/RunShellCommandTool";
     static final String SHELL_RESOLVER = "com/google/aiplugin/agents/tools/execute/WindowsShellResolver";
     static final String MITP = "com/android/studio/ml/modelproviders/providerinfo/ModelInformationTablePanel";
+    static final String MITP_COMPANION = MITP + "$Companion";
     static final String MODELS_TOOLBAR = "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport";
     static final String KX_DESC = "kotlinx/serialization/descriptors/SerialDescriptor";
     static final String KX_ENCODER = "kotlinx/serialization/encoding/CompositeEncoder";
@@ -66,6 +67,7 @@ public class PatchTool {
             case "timeline": patchTimelineController(args[1], args[2]); break;
             case "winshell": patchRunShell(args[1], args[2]); break;
             case "modelstable": patchModelsTableToolbar(args[1], args[2]); break;
+            case "modelsmerge": patchModelsTableMerge(args[1], args[2]); break;
             default: throw new IllegalArgumentException(cmd);
         }
     }
@@ -1146,5 +1148,45 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, MITP, cw.toByteArray());
         System.out.println("patched " + MITP);
+    }
+
+    // ModelInformationTablePanel$Companion.updateModelList(List existing, List newModels)：
+    // 方法体整体替换为 AvailableModelsToolbarSupport.mergeModelList：
+    //  1. 手动 Refresh 保留孤儿条目（不在拉取结果里的既有/手动添加条目）——
+    //     对齐后台自动刷新（ModelProviderAutoRefreshService）语义，
+    //     否则手动添加的自定义模型会在下一次手动 Refresh 时被抹掉；
+    //  2. fetched 为空（Refresh 失败路径传 emptyList()）时列表原样保留，
+    //     修复原实现"刷新失败弹错后整表清空"缺陷。
+    // 同 identifier 条目继承既有 enabled 的原语义不变。
+    // 实现方式：清除原指令，写入 [aload_1, aload_2, invokestatic, return]（实例方法，
+    // slot0=Companion this，slot1/2=两个 List 实参）。必须清除而非保留死代码：
+    // 前置早退 + 死代码在 HotSpot 下触发 VerifyError "Expecting a stack map frame"
+    // （死代码起点无帧；ASM CheckClassAdapter 不校验不可达代码，拦不住此类问题）。
+    // 替换体为纯直线代码：无分支 → 无需 StackMapTable（空帧表合法），
+    // LVT 引用随原指令一并移除，无 try/catch（前置断言），COMPUTE_MAXS 即可。
+    static void patchModelsTableMerge(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, MITP_COMPANION)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "updateModelList", "(Ljava/util/List;Ljava/util/List;)V");
+        if (m.tryCatchBlocks != null && !m.tryCatchBlocks.isEmpty()) {
+            throw new IllegalStateException("unexpected try/catch blocks in updateModelList");
+        }
+        m.instructions.clear();
+        m.localVariables = null;
+        m.visibleLocalVariableAnnotations = null;
+        m.invisibleLocalVariableAnnotations = null;
+        m.tryCatchBlocks = null;
+        m.instructions.add(new VarInsnNode(ALOAD, 1));
+        m.instructions.add(new VarInsnNode(ALOAD, 2));
+        m.instructions.add(new MethodInsnNode(INVOKESTATIC, MODELS_TOOLBAR, "mergeModelList",
+                "(Ljava/util/List;Ljava/util/List;)V", false));
+        m.instructions.add(new InsnNode(RETURN));
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, MITP_COMPANION, cw.toByteArray());
+        System.out.println("patched " + MITP_COMPANION);
     }
 }

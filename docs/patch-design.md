@@ -43,6 +43,9 @@
 ├── AvailableModelsToolbarSupport
 │                             Available Models 表格工具栏 "Add Model" + 按钮
 │                             （ToolbarDecorator.addExtraAction，随选中 provider 启用）
+│                             + showAddModelDialog/addCustomModel（输入 model ID 去重追加）
+│                             + mergeModelList（updateModelList 替换体：孤儿保留 +
+│                             空 fetched 原样保留）
 
 ASM 补丁（PatchTool.java）
 ├── ProviderData$RemoteProviderData
@@ -82,6 +85,10 @@ ASM 补丁（PatchTool.java）
 ├── ModelInformationTablePanel
 │   └── setupUi：ToolbarDecorator 链尾（disableDownAction 之后）插入
 │                AvailableModelsToolbarSupport.decorate(this, getCurrentProvider)
+├── ModelInformationTablePanel$Companion
+│   └── updateModelList：方法体清除后写入 [aload_1, aload_2, invokestatic,
+│                mergeModelList, return]（直线代码无帧；死代码方案在 HotSpot 下会报
+│                "Expecting a stack map frame"，故必须清除原指令）
 ├── PersistedMetadata
 │   ├── + 字段 reasoningEffort（String，可空）+ getter/setter
 │   └── write$Self：末尾调 ThinkingEffortStore.encodeElement（元素 16）
