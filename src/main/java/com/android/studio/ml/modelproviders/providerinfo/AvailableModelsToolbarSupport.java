@@ -27,6 +27,10 @@ import org.jetbrains.annotations.Nullable;
 // 在 Model Providers 列表上的 "+" 按钮组）挂 "Add Model" 与 "Remove Model" 两个动作
 //（addExtraAction 按调用顺序追加，Remove 渲染在 Add 右侧）。
 // 注入点：ModelInformationTablePanel.setupUi 的 ToolbarDecorator 链尾（ASM 补丁，PatchTool modelstable）。
+// 作用域：ModelInformationTablePanel 被 Remote / Local / AI Studio 三个 InfoPanel 共享
+//（Gemma 面板为独立实现），故按钮在三个面板的 Available Models 工具栏都会出现；
+// 动作经 getCurrentProvider 动态解析当前选中 provider，对本地供应商（如 Ollama
+// 手动补模型 id）同样适用。
 // 行为约束：动作在点击时才通过 getCurrentProvider 解析当前选中行（与 Refresh 链接同款解析方式），
 // 不缓存 ProviderDetails —— 左侧列表切换后自动跟随。
 //
@@ -167,7 +171,7 @@ public final class AvailableModelsToolbarSupport {
     /**
      * 表格当前选中的模型行（排序视图索引转换到模型索引，与原类 getSortedModels 同款处理）。
      *
-     * @return 选中的条目；面板为空或无选中行返回 null
+     * @return 选中的条目；面板为空、无选中行或视图行越界（陈旧事件）返回 null
      */
     @Nullable
     public static ModelDetails getSelectedModel(@Nullable ModelInformationTablePanel panel) {
@@ -176,7 +180,10 @@ public final class AvailableModelsToolbarSupport {
         }
         TableView<ModelDetails> table = panel.getModelTable$aiplugin_core_aicore();
         int viewRow = table.getSelectedRow();
-        if (viewRow < 0) {
+        // 上界防御：陈旧视图行（模型变更与点击事件竞争时 selection 可能越界）会让
+        // DefaultRowSorter.convertRowIndexToModel 抛 IllegalArgumentException，
+        // 按 no-op 惯例返回 null 而非把异常抛进 Swing 事件链。
+        if (viewRow < 0 || viewRow >= table.getRowCount()) {
             return null;
         }
         int modelRow = table.convertRowIndexToModel(viewRow);

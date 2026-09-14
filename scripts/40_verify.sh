@@ -18,7 +18,7 @@
 #  13) RunShellCommandWindowsArgTest：run_shell_command Windows 分支命令数组矩阵（默认/
 #      显式 pwsh/cmd/不支持 shell、cmd wrapper、-NonInteractive、EncodedCommand 编码链路）
 #  14) AvailableModelsToolbarTest：Available Models 工具栏 "+"/"-" 按钮挂载/文案/启用判定、
-#      选中行读取与按同一性移除、no-op 路径
+#      选中行读取与按同一性移除、no-op 路径（含陈旧视图行上界防御）
 #  15) MergeModelListTest：自定义模型工厂与添加去重；mergeModelList 语义（孤儿保留、
 #      enabled 继承、空 fetched 原样保留）；反射调用被补丁的 Companion.updateModelList
 #      验证 ASM 替换生效

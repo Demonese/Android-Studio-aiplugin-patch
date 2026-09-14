@@ -21,7 +21,7 @@ import java.util.List;
 //   2) Add 按钮启用判定跟随当前 provider（无选中禁用 / 有选中启用）
 //   3) Remove 按钮启用判定跟随表格行选择（无选中禁用 / 有选中启用）
 //   4) removeSelectedModel 按对象同一性精确移除选中条目并刷新表格（行数/内容）
-//   5) null provider / null 面板 / 无选中 → no-op 返回 false，不修改列表
+//   5) null provider / null 面板 / 无选中 / 陈旧视图行 → no-op 返回 false，不修改列表
 //   6) 多次 decorate 独立生效
 public class AvailableModelsToolbarTest {
 
@@ -104,6 +104,21 @@ public class AvailableModelsToolbarTest {
         ok(!AvailableModelsToolbarSupport.removeSelectedModel(provider, null), "removeSelectedModel(null panel) == false");
         ok(!AvailableModelsToolbarSupport.removeSelectedModel(provider, panel), "removeSelectedModel(no selection) == false");
         ok(provider.getModelList().size() == before, "no-op paths leave list untouched");
+
+        // 上界防御：陈旧视图行（getSelectedRow 超出当前行数）→ no-op 返回 null，
+        // 不让 DefaultRowSorter.convertRowIndexToModel 抛 IllegalArgumentException
+        TableView<ModelDetails> staleTable = new TableView<ModelDetails>(panel.getModelTableList()) {
+            @Override
+            public int getSelectedRow() {
+                return 99;
+            }
+        };
+        staleTable.setAutoCreateRowSorter(true);
+        installModelTable(panel, staleTable);
+        ok(AvailableModelsToolbarSupport.getSelectedModel(panel) == null,
+                "stale view row (>= row count) → getSelectedModel returns null (no exception)");
+        ok(!AvailableModelsToolbarSupport.isRemoveEnabled(panel), "stale view row → remove disabled");
+        installModelTable(panel, table);  // 恢复正常表格
 
         // 复刻补丁后的调用序（decorator 链尾 decorate → createPanel），验证 UI 组装不抛异常
         // 多次 decorate 独立生效（复刻补丁后的调用序：链尾 decorate → 后续 createPanel）

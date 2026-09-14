@@ -28,6 +28,7 @@ Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该�
 5. Windows 平台 `run_shell_command`：启动时以 `where.exe` 探测 PowerShell 7 (pwsh)，可用则默认/显式 powershell 均走 `pwsh.exe -EncodedCommand`，工具描述同步标明 "PowerShell 7 (the default)"；无 pwsh 时完全保持原行为（`powershell.exe` + 原文案）。
 6. Available Models 表格工具栏新增 "Add Model" `+` 与 "Remove Model" `-` 按钮（官方同款 `addExtraAction`，与左侧 Model Providers 列表按钮同风格）。`+` 随当前选中 provider 启用/禁用：点击弹出 "Enter model ID" 输入框（对照官方 "Add Command Prefix"），回车后按 identifier 去重追加自定义模型（`enabled=true`、token limits=`-1` 运行时回退硬编码表）并刷新表格，随 Apply/OK 持久化到 `ai.providers.xml`。`-` 随表格行选择启用/禁用：按对象同一性从 provider 模型列表移除选中条目并刷新表格，同样随 Apply/OK 持久化。
    同时 `Companion.updateModelList` 被替换为 `mergeModelList`：手动 Refresh 保留孤儿条目（手动添加/已下架模型不再被抹掉，对齐后台自动刷新语义）；Refresh 失败时列表原样保留（修复原实现失败后整表清空的缺陷）。
+   作用域说明：`ModelInformationTablePanel` 被 Remote / Local / AI Studio 三个供应商面板共享（Gemma 面板为独立实现），因此 `+`/`-` 按钮与列表合并修复对这三个面板同时生效；动作按左侧列表当前选中 provider 动态解析，对本地供应商（如 Ollama 手动补模型 id）同样可用。
 
 此外还有针对吃白饭的大肥鱼 DeepSeek 的修复：
 

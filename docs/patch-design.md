@@ -88,6 +88,8 @@ ASM 补丁（PatchTool.java）
 ├── ModelInformationTablePanel
 │   └── setupUi：ToolbarDecorator 链尾（disableDownAction 之后）插入
 │                AvailableModelsToolbarSupport.decorate(this, getCurrentProvider)
+│                （该面板被 Remote / Local / AI Studio 三个 InfoPanel 共享，
+│                 Gemma 面板独立实现不受影响；按钮与列表合并修复对三者同时生效）
 ├── ModelInformationTablePanel$Companion
 │   └── updateModelList：方法体清除后写入 [aload_1, aload_2, invokestatic,
 │                mergeModelList, return]（直线代码无帧；死代码方案在 HotSpot 下会报
