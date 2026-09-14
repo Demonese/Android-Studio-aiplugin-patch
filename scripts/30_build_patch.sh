@@ -19,7 +19,8 @@
 #   阶段11 ASM 补丁 RunShellCommandHandler/RunShellCommandTool：Windows 平台 pwsh 优先
 #          （where.exe 探测，默认/显式 powershell 走 pwsh.exe）与按 pwsh 可用性的动态文案
 #   阶段13 ASM 补丁 ModelInformationTablePanel.setupUi：Available Models 表格工具栏挂
-#          AvailableModelsToolbarSupport 的 "Add Model" "+" 按钮（官方同款 addExtraAction）
+#          AvailableModelsToolbarSupport 的 "Add Model" "+" 与 "Remove Model" "-" 按钮
+#          （官方同款 addExtraAction，与左侧 Model Providers 列表按钮同风格）
 #   阶段14 ASM 补丁 ModelInformationTablePanel$Companion.updateModelList：
 #          方法体前置早退替换为 mergeModelList —— 手动 Refresh 保留孤儿条目
 #          （对齐自动刷新语义，手动添加的自定义模型不再被抹掉）；
@@ -117,7 +118,8 @@ jar uf "$DIST/aiplugin-patched.jar" \
   -C "$OUT" "com/google/studiobot/ui/querybox/ThinkingEffortPicker.class" \
   -C "$OUT" "com/google/studiobot/ui/querybox/ThinkingEffortStore.class" \
   -C "$OUT" "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport.class" \
-  -C "$OUT" "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport\$AddModelAction.class"
+  -C "$OUT" "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport\$AddModelAction.class" \
+  -C "$OUT" "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport\$RemoveModelAction.class"
 
 unzip -t "$DIST/aiplugin-patched.jar" > /dev/null
 echo "== 构建完成：$DIST/aiplugin-patched.jar =="

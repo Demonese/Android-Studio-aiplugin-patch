@@ -8,10 +8,12 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.ui.ToolbarDecorator;
+import com.intellij.ui.table.TableView;
 import java.awt.Component;
 import java.awt.event.InputEvent;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,10 +21,11 @@ import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-// Available Models 表格工具栏的 "+" 按钮（补丁注入）。
+// Available Models 表格工具栏的 "+"/"-" 按钮（补丁注入）。
 // 原实现 ToolbarDecorator 链 disableAddAction/disableRemoveAction/disableUpAction/disableDownAction，
 // 表格无任何手动增删入口；本类以官方同款 addExtraAction 方式（对照 ModelProviderGroupPanel
-// 在 Model Providers 列表上的 "+" 按钮组）挂一个 "Add Model" 动作。
+// 在 Model Providers 列表上的 "+" 按钮组）挂 "Add Model" 与 "Remove Model" 两个动作
+//（addExtraAction 按调用顺序追加，Remove 渲染在 Add 右侧）。
 // 注入点：ModelInformationTablePanel.setupUi 的 ToolbarDecorator 链尾（ASM 补丁，PatchTool modelstable）。
 // 行为约束：动作在点击时才通过 getCurrentProvider 解析当前选中行（与 Refresh 链接同款解析方式），
 // 不缓存 ProviderDetails —— 左侧列表切换后自动跟随。
@@ -42,11 +45,13 @@ public final class AvailableModelsToolbarSupport {
     }
 
     // 被补丁的 setupUi 在 disableDownAction 之后调用（栈上持有 decorator）。
-    // panel 参数供动作在添加成功后回写表格 UI（updateUi）。
+    // panel 参数供动作在增删成功后回写表格 UI（updateUi）。
+    // addExtraAction 追加顺序即渲染顺序：先 Add 后 Remove（"-" 在 "+" 右边）。
     public static void decorate(@NotNull ToolbarDecorator decorator,
                                 @Nullable ModelInformationTablePanel panel,
                                 @NotNull Function0<ProviderDetails> getCurrentProvider) {
         decorator.addExtraAction(new AddModelAction(panel, getCurrentProvider));
+        decorator.addExtraAction(new RemoveModelAction(panel, getCurrentProvider));
     }
 
     // 按钮启用判定：有当前选中的 provider 即可用（与工具栏其他动作的判定时机一致）。
@@ -153,6 +158,93 @@ public final class AvailableModelsToolbarSupport {
         }
         existing.clear();
         existing.addAll(updated);
+    }
+
+    // ===== "-" 移除选中模型 =====
+
+    /**
+     * 表格当前选中的模型行（排序视图索引转换到模型索引，与原类 getSortedModels 同款处理）。
+     *
+     * @return 选中的条目；面板为空或无选中行返回 null
+     */
+    @Nullable
+    public static ModelDetails getSelectedModel(@Nullable ModelInformationTablePanel panel) {
+        if (panel == null) {
+            return null;
+        }
+        TableView<ModelDetails> table = panel.getModelTable$aiplugin_core_aicore();
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return null;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < 0) {
+            return null;
+        }
+        return panel.getModelTableList().getItem(modelRow);
+    }
+
+    /** 移除按钮启用判定：表格有选中行即可用。update() 与测试共用。 */
+    public static boolean isRemoveEnabled(@Nullable ModelInformationTablePanel panel) {
+        return getSelectedModel(panel) != null;
+    }
+
+    /**
+     * 从 provider.modelList 移除表格当前选中的模型，成功后刷新表格 UI（updateUi）。
+     * 按对象同一性（==）精确匹配，避免数据类 equals 把字段完全相同的兄弟条目一并误删。
+     * 写入路径与 Add/勾选开关一致：改 provider.modelList → Apply/OK → saveState 持久化。
+     *
+     * @return 实际移除返回 true；provider/面板/选中行为空或未命中返回 false（不修改列表）
+     */
+    public static boolean removeSelectedModel(@Nullable ProviderDetails provider,
+                                              @Nullable ModelInformationTablePanel panel) {
+        if (provider == null || panel == null) {
+            return false;
+        }
+        ModelDetails selected = getSelectedModel(panel);
+        if (selected == null) {
+            return false;
+        }
+        for (Iterator<ModelDetails> it = provider.getModelList().iterator(); it.hasNext(); ) {
+            if (it.next() == selected) {
+                it.remove();
+                panel.updateUi(provider);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static final class RemoveModelAction extends AnAction {
+        @Nullable
+        private final ModelInformationTablePanel panel;
+        @NotNull
+        private final Function0<ProviderDetails> getCurrentProvider;
+
+        public RemoveModelAction(@Nullable ModelInformationTablePanel panel,
+                                 @NotNull Function0<ProviderDetails> getCurrentProvider) {
+            super("Remove Model", "Remove the selected model from this provider", AllIcons.General.Remove);
+            this.panel = panel;
+            this.getCurrentProvider = getCurrentProvider;
+        }
+
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent e) {
+            removeSelectedModel(getCurrentProvider.invoke(), panel);
+        }
+
+        @Override
+        public void update(@NotNull AnActionEvent e) {
+            // CommonActionsPanel 在表格行选择变化时会刷新动作状态（TableToolbarDecorator
+            // 注册 ListSelectionListener），故按选中行实时启停。
+            e.getPresentation().setEnabled(isRemoveEnabled(panel));
+        }
+
+        // update() 读取表格行选择状态（Swing 数据），必须在 EDT 执行。
+        @Override
+        public @NotNull ActionUpdateThread getActionUpdateThread() {
+            return ActionUpdateThread.EDT;
+        }
     }
 
     public static final class AddModelAction extends AnAction {

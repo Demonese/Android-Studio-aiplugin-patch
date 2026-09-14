@@ -17,7 +17,8 @@
 #      非 Windows 环境失败回退路径
 #  13) RunShellCommandWindowsArgTest：run_shell_command Windows 分支命令数组矩阵（默认/
 #      显式 pwsh/cmd/不支持 shell、cmd wrapper、-NonInteractive、EncodedCommand 编码链路）
-#  14) AvailableModelsToolbarTest：Available Models 工具栏 "+" 按钮挂载/文案/启用判定
+#  14) AvailableModelsToolbarTest：Available Models 工具栏 "+"/"-" 按钮挂载/文案/启用判定、
+#      选中行读取与按同一性移除、no-op 路径
 #  15) MergeModelListTest：自定义模型工厂与添加去重；mergeModelList 语义（孤儿保留、
 #      enabled 继承、空 fetched 原样保留）；反射调用被补丁的 Companion.updateModelList
 #      验证 ASM 替换生效
@@ -125,7 +126,7 @@ javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/te
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" RunShellCommandWindowsArgTest | grep -E "ok:|FAILED|WINDOWS_ARG_OK"
 java "$JAVA_ENC" -cp "$RT_CP:$TESTOUT" RunShellCommandWindowsArgTest | grep -q WINDOWS_ARG_OK || { echo "[!] RunShellCommandWindowsArgTest 失败"; exit 1; }
 
-echo "[14/15] Available Models 工具栏 \"+\" 按钮测试（headless）..."
+echo "[14/15] Available Models 工具栏 \"+\"/\"-\" 按钮测试（headless）..."
 javac --release "$JAVA_RELEASE" -nowarn -cp "$RT_CP" -d "$TESTOUT" "$PROJ/src/test/java/AvailableModelsToolbarTest.java"
 java "$JAVA_ENC" -Djava.awt.headless=true $AWT_OPENS -cp "$RT_CP:$TESTOUT" AvailableModelsToolbarTest | grep -E "ok:|FAILED|MODELS_TOOLBAR_OK"
 java "$JAVA_ENC" -Djava.awt.headless=true $AWT_OPENS -cp "$RT_CP:$TESTOUT" AvailableModelsToolbarTest | grep -q MODELS_TOOLBAR_OK || { echo "[!] AvailableModelsToolbarTest 失败"; exit 1; }

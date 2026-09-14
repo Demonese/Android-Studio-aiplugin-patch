@@ -41,9 +41,12 @@
 └── WindowsShellResolver      Windows 平台 pwsh 探测（where.exe）+ shell 归一化 +
                              按 pwsh 可用性的工具描述文案决议
 ├── AvailableModelsToolbarSupport
-│                             Available Models 表格工具栏 "Add Model" + 按钮
-│                             （ToolbarDecorator.addExtraAction，随选中 provider 启用）
-│                             + showAddModelDialog/addCustomModel（输入 model ID 去重追加）
+│                             Available Models 表格工具栏 "Add Model" + 与 "Remove Model" - 按钮
+│                             （ToolbarDecorator.addExtraAction 按序追加，- 在 + 右侧）
+│                             + isEnabled（随选中 provider 启用）/ showAddModelDialog /
+│                             addCustomModel（输入 model ID 去重追加）
+│                             + getSelectedModel/isRemoveEnabled/removeSelectedModel
+│                             （按排序视图索引读选中行，== 同一性移除 + updateUi 刷新）
 │                             + mergeModelList（updateModelList 替换体：孤儿保留 +
 │                             空 fetched 原样保留）
 
