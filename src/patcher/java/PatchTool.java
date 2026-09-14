@@ -42,6 +42,8 @@ public class PatchTool {
     static final String SHELL_HANDLER = "com/google/aiplugin/agents/tools/execute/RunShellCommandHandler";
     static final String SHELL_TOOL = "com/google/aiplugin/agents/tools/execute/RunShellCommandTool";
     static final String SHELL_RESOLVER = "com/google/aiplugin/agents/tools/execute/WindowsShellResolver";
+    static final String MITP = "com/android/studio/ml/modelproviders/providerinfo/ModelInformationTablePanel";
+    static final String MODELS_TOOLBAR = "com/android/studio/ml/modelproviders/providerinfo/AvailableModelsToolbarSupport";
     static final String KX_DESC = "kotlinx/serialization/descriptors/SerialDescriptor";
     static final String KX_ENCODER = "kotlinx/serialization/encoding/CompositeEncoder";
     static final String KX_DECODER = "kotlinx/serialization/encoding/CompositeDecoder";
@@ -63,6 +65,7 @@ public class PatchTool {
             case "orch": patchOrchestrator(args[1], args[2]); break;
             case "timeline": patchTimelineController(args[1], args[2]); break;
             case "winshell": patchRunShell(args[1], args[2]); break;
+            case "modelstable": patchModelsTableToolbar(args[1], args[2]); break;
             default: throw new IllegalArgumentException(cmd);
         }
     }
@@ -1101,5 +1104,47 @@ public class PatchTool {
         cn.accept(cw);
         writeClass(out, SHELL_HANDLER, cw.toByteArray());
         System.out.println("patched " + SHELL_HANDLER);
+    }
+
+    // ModelInformationTablePanel.setupUi：ToolbarDecorator 链尾（disableDownAction 之后）
+    // 插入 AvailableModelsToolbarSupport.decorate(this, getCurrentProvider)，为 Available Models
+    // 表格工具栏挂 "Add Model" "+" 按钮（官方同款 addExtraAction，对照 ModelProviderGroupPanel
+    // 在 Model Providers 列表上的 "+" 按钮组）。
+    // 链尾为直线代码：[decorator] → dup + decorate(this, fn)（进出栈净 0）→ 原
+    // checkNotNullExpressionValue/astore_3 不变。setupUi(this=0, builder=1, getCurrentProvider=2)。
+    // 无新分支、无新栈帧，COMPUTE_MAXS 即可。
+    static void patchModelsTableToolbar(String inDir, String outDir) throws Exception {
+        Path in = Path.of(inDir);
+        Path out = Path.of(outDir);
+        ClassNode cn = new ClassNode();
+        new ClassReader(readClass(in, MITP)).accept(cn, 0);
+        MethodNode m = findMethod(cn, "setupUi", "(Lcom/intellij/ui/dsl/builder/Panel;Lkotlin/jvm/functions/Function0;)V");
+
+        // 锚点：方法内唯一一次 disableDownAction 调用（装饰链末位）
+        MethodInsnNode disableDown = null;
+        for (AbstractInsnNode n = m.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (n instanceof MethodInsnNode
+                    && ((MethodInsnNode) n).owner.equals("com/intellij/ui/ToolbarDecorator")
+                    && ((MethodInsnNode) n).name.equals("disableDownAction")) {
+                if (disableDown != null) {
+                    throw new IllegalStateException("multiple disableDownAction calls in setupUi");
+                }
+                disableDown = (MethodInsnNode) n;
+            }
+        }
+        if (disableDown == null) throw new IllegalStateException("disableDownAction not found in setupUi");
+
+        InsnList l = new InsnList();
+        l.add(new InsnNode(DUP));
+        l.add(new VarInsnNode(ALOAD, 0));
+        l.add(new VarInsnNode(ALOAD, 2));
+        l.add(new MethodInsnNode(INVOKESTATIC, MODELS_TOOLBAR, "decorate",
+                "(Lcom/intellij/ui/ToolbarDecorator;L" + MITP + ";Lkotlin/jvm/functions/Function0;)V", false));
+        m.instructions.insert(disableDown, l);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        writeClass(out, MITP, cw.toByteArray());
+        System.out.println("patched " + MITP);
     }
 }

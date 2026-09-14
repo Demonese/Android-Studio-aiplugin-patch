@@ -40,6 +40,7 @@ echo "[*] 提取待补丁类的原始 class ..."
 unzip -o -q "$WORK/as/plugin/aiplugin.jar" \
   "com/android/studio/ml/modelproviders/data/ProviderData*.class" \
   "com/android/studio/ml/backends/settings/RemoteModelProviderInfoPanel.class" \
+  "com/android/studio/ml/modelproviders/providerinfo/ModelInformationTablePanel.class" \
   "com/android/studio/ml/backends/openai/OpenAiModelApi.class" \
   "com/android/studio/ml/backends/openai/OpenAiModelApi\$streamGenerateContent\$1.class" \
   "com/android/studio/ml/backends/openai/OpenAiModelApiProvider.class" \

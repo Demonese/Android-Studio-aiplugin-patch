@@ -40,6 +40,9 @@
 ├── ThinkingEffortStore      思考强度运行时存储 + 持久化钩子 + ReasoningEffort 映射
 └── WindowsShellResolver      Windows 平台 pwsh 探测（where.exe）+ shell 归一化 +
                              按 pwsh 可用性的工具描述文案决议
+├── AvailableModelsToolbarSupport
+│                             Available Models 表格工具栏 "Add Model" + 按钮
+│                             （ToolbarDecorator.addExtraAction，随选中 provider 启用）
 
 ASM 补丁（PatchTool.java）
 ├── ProviderData$RemoteProviderData
@@ -76,6 +79,9 @@ ASM 补丁（PatchTool.java）
 │                reasoningEffort(NONE) 回退分支门控改为恒跳过
 ├── QueryBoxKt.ActionsRow
 │   └── ModelPicker + 8dp Spacer 之后插入 ThinkingEffortPicker.render + 8dp Spacer
+├── ModelInformationTablePanel
+│   └── setupUi：ToolbarDecorator 链尾（disableDownAction 之后）插入
+│                AvailableModelsToolbarSupport.decorate(this, getCurrentProvider)
 ├── PersistedMetadata
 │   ├── + 字段 reasoningEffort（String，可空）+ getter/setter
 │   └── write$Self：末尾调 ThinkingEffortStore.encodeElement（元素 16）

@@ -26,6 +26,7 @@ Android Studio Gemini 插件是商业闭源项目，理论上该项目也应该�
 3. Chat Completions API：原实现不回传 assistant 消息的思考内容，现将已收到的 `thought` 用 `reasoning_content` 附加字段回传。（TODO：提供字段名设置界面，因为有些供应商不是这个字段）
 4. 思考强度：Agent 发送区模型选择与 Submit 之间新增思考强度选择，样式复用模型选择，挡位有 `none/minimal/low/medium/high/xhigh/max` 与 OpenAI 官方一致，按会话持久化到对话目录 `metadata.json` 的 `reasoningEffort` 字段（旧对话默认 `medium`），并接入请求参数（供应商不接受时沿用原生自适应回退）。
 5. Windows 平台 `run_shell_command`：启动时以 `where.exe` 探测 PowerShell 7 (pwsh)，可用则默认/显式 powershell 均走 `pwsh.exe -EncodedCommand`，工具描述同步标明 "PowerShell 7 (the default)"；无 pwsh 时完全保持原行为（`powershell.exe` + 原文案）。
+6. Available Models 表格工具栏新增 "Add Model" `+` 按钮（官方同款 `addExtraAction`，与左侧 Model Providers 列表的 `+` 同风格），随当前选中 provider 启用/禁用；添加对话框尚未实现（功能后续接入，当前点击弹提示）。
 
 此外还有针对吃白饭的大肥鱼 DeepSeek 的修复：
 
@@ -58,6 +59,8 @@ aiplugin-patch/
 │   │   ├── com/google/studiobot/ui/querybox/
 │   │   │   ├── ThinkingEffortPicker.java
 │   │   │   └── ThinkingEffortStore.java
+│   │   ├── com/android/studio/ml/modelproviders/providerinfo/
+│   │   │   └── AvailableModelsToolbarSupport.java
 │   │   └── com/google/aiplugin/agents/tools/execute/
 │   │       └── WindowsShellResolver.java
 │   ├── patcher/java/PatchTool.java   # ASM 补丁工具
