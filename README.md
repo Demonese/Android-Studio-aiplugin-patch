@@ -70,7 +70,7 @@ aiplugin-patch/
 │                              # ReasoningEffortPersistTest / ReasoningEffortApiTest / UiLoadTest /
 │                              # ApiProtocolUiBehaviorTest / ProviderApiTypePropagationTest /
 │                              # WindowsShellResolverTest / RunShellCommandWindowsArgTest /
-                              # AvailableModelsToolbarTest / MergeModelListTest
+│                              # AvailableModelsToolbarTest / MergeModelListTest
 ├── docs/
 │   ├── analysis.md            # 逆向分析：fallback 机制、UI 结构、持久化
 │   ├── patch-design.md        # 补丁设计、插入点、后端协议控制

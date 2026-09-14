@@ -1110,8 +1110,9 @@ public class PatchTool {
 
     // ModelInformationTablePanel.setupUi：ToolbarDecorator 链尾（disableDownAction 之后）
     // 插入 AvailableModelsToolbarSupport.decorate(this, getCurrentProvider)，为 Available Models
-    // 表格工具栏挂 "Add Model" "+" 按钮（官方同款 addExtraAction，对照 ModelProviderGroupPanel
-    // 在 Model Providers 列表上的 "+" 按钮组）。
+    // 表格工具栏挂 "Add Model" "+" 与 "Remove Model" "-" 按钮（官方同款 addExtraAction，
+    // 按调用序追加、"-" 在 "+" 右侧，对照 ModelProviderGroupPanel 在 Model Providers
+    // 列表上的 "+" 按钮组）。
     // 链尾为直线代码：[decorator] → dup + decorate(this, fn)（进出栈净 0）→ 原
     // checkNotNullExpressionValue/astore_3 不变。setupUi(this=0, builder=1, getCurrentProvider=2)。
     // 无新分支、无新栈帧，COMPUTE_MAXS 即可。

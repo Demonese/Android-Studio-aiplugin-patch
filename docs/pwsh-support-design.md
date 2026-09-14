@@ -328,7 +328,7 @@ iconst_0; ldc ...; aastore` 结构）。
 
 ### 6.2 `scripts/30_build_patch.sh`
 
-- 新阶段（置于全部 ASM 阶段之后、组装之前，现为 [12/13] 阶段11）：`PatchTool winshell ...`
+- 新阶段（置于全部 ASM 阶段之后、组装之前，现为 [12/15] 阶段11）：`PatchTool winshell ...`
   （补丁 RunShellCommandHandler 与 RunShellCommandTool 两个类）
 - 阶段 4 的 `find src/main/java` 自动包含新类，无需改
 - 组装 `jar uf` 增加：
@@ -387,7 +387,7 @@ iconst_0; ldc ...; aastore` 结构）。
 | 7 | `""` | 任意 | false | 含 `-NonInteractive` |
 | 8 | `setForTesting(false)`＋`""` | 任意 | true | `[powershell.exe, ...]`（回退＝现状） |
 
-**L4 回归层**：40_verify.sh 现有各环节全量保持；新增 [12/13][13/13] 两个环节（编号
+**L4 回归层**：40_verify.sh 现有各环节全量保持；新增 [12/15][13/15] 两个环节（编号
 顺延），CheckClassAdapter 列表加 `RunShellCommandHandler` 与 `RunShellCommandTool`。
 
 **可选增强**：Ubuntu 装 Microsoft 官方 Linux 版 pwsh 做 skip-if-absent 冒烟——若
@@ -417,9 +417,9 @@ verify 保持全绿。
 
 1. `src/main/java/.../execute/WindowsShellResolver.java`（第 3 节源码）—— 完毕
 2. `PatchTool`：+`case "winshell"` 与 `patchRunShell`（行为层 3 注入点 + 文案层 2 处，第 4/5 节）—— 完毕
-3. `30_build_patch.sh`：新阶段 + 组装两项（第 6.2 节，现为阶段 11/12）—— 完毕
+3. `30_build_patch.sh`：新阶段 + 组装两项（第 6.2 节，现为阶段 11 与 14）—— 完毕
 4. `src/test/java/WindowsShellResolverTest.java`、`RunShellCommandWindowsArgTest.java` —— 完毕
-5. `40_verify.sh`：字节码校验 + 两个新环节（第 6.3 节，现为 [12/13][13/13]）—— 完毕
+5. `40_verify.sh`：字节码校验 + 两个新环节（第 6.3 节，现为 [12/15][13/15]）—— 完毕
 6. `RunShellCommandTool` 文案层 LDC 替换（第 5 节）—— 完毕（提交 0bcc5ed）
 7. 回归：完整 `30_build_patch.sh` + `40_verify.sh`，确认无 pwsh 模拟下
    （`setForTesting(false)`）行为与现状逐位一致 —— 完毕；Windows 真机人工验证见第 9 节

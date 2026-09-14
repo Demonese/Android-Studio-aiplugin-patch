@@ -38,8 +38,8 @@
 ├── OpenAiCompletionSupport  Chat Completions 请求构造：回传 reasoning_content
 ├── ThinkingEffortPicker     发送区思考强度下拉（复用 ModelPicker 渲染）
 ├── ThinkingEffortStore      思考强度运行时存储 + 持久化钩子 + ReasoningEffort 映射
-└── WindowsShellResolver      Windows 平台 pwsh 探测（where.exe）+ shell 归一化 +
-                             按 pwsh 可用性的工具描述文案决议
+├── WindowsShellResolver      Windows 平台 pwsh 探测（where.exe）+ shell 归一化 +
+│                             按 pwsh 可用性的工具描述文案决议
 ├── AvailableModelsToolbarSupport
 │                             Available Models 表格工具栏 "Add Model" + 与 "Remove Model" - 按钮
 │                             （ToolbarDecorator.addExtraAction 按序追加，- 在 + 右侧）
@@ -117,7 +117,8 @@ ASM 补丁（PatchTool.java）
    `OpenAiApiTypeSupport` 调用 `OpenAiModelApi.getOpenAiApiType`，
    这些方法均由 ASM 阶段添加，因此必须先补丁数据类与 API 类、再编译新源码
    （见 30_build_patch.sh 的阶段顺序：data → api → metadata → javac →
-   panel → querybox → metaser → convmeta → orch → timeline → winshell → 组装）。
+   panel → querybox → metaser → convmeta → orch → timeline → winshell →
+   modelstable → modelsmerge → 组装）。
 2. **面板私有状态用反射读**：回写设置需要面板的 `getCurrentProvider`（private
    `Function0<ProviderDetails>`）。反射优先读 private 字段（字段名是稳定 API），
    取不到时退回 Kotlin synthetic 访问器 `access$getGetCurrentProvider$p`；

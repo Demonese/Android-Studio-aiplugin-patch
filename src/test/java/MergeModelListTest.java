@@ -16,7 +16,7 @@ import java.util.List;
 //    - fetched 顺序重建 + 同 identifier 继承既有 enabled + 孤儿条目保留（对齐自动刷新语义）
 //    - fetched 为空（Refresh 失败路径）→ 列表原样保留（修复原实现整表清空缺陷）
 // 4) 反射调用被补丁的 ModelInformationTablePanel$Companion.updateModelList（dist jar 内
-//    被替换为 mergeModelList 早退）：孤儿保留断言对未补丁实现必然失败，验证 ASM 补丁生效
+//    被替换为 mergeModelList 直线调用）：孤儿保留断言对未补丁实现必然失败，验证 ASM 补丁生效
 public class MergeModelListTest {
     private static int passed = 0;
     private static int failed = 0;

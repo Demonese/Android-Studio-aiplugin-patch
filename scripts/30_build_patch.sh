@@ -18,14 +18,14 @@
 #   阶段10 ASM 补丁 TrajectoryTimelineController：会话呈现同步
 #   阶段11 ASM 补丁 RunShellCommandHandler/RunShellCommandTool：Windows 平台 pwsh 优先
 #          （where.exe 探测，默认/显式 powershell 走 pwsh.exe）与按 pwsh 可用性的动态文案
-#   阶段13 ASM 补丁 ModelInformationTablePanel.setupUi：Available Models 表格工具栏挂
+#   阶段12 ASM 补丁 ModelInformationTablePanel.setupUi：Available Models 表格工具栏挂
 #          AvailableModelsToolbarSupport 的 "Add Model" "+" 与 "Remove Model" "-" 按钮
 #          （官方同款 addExtraAction，与左侧 Model Providers 列表按钮同风格）
-#   阶段14 ASM 补丁 ModelInformationTablePanel$Companion.updateModelList：
-#          方法体前置早退替换为 mergeModelList —— 手动 Refresh 保留孤儿条目
+#   阶段13 ASM 补丁 ModelInformationTablePanel$Companion.updateModelList：
+#          方法体清除后替换为 mergeModelList 直线调用 —— 手动 Refresh 保留孤儿条目
 #          （对齐自动刷新语义，手动添加的自定义模型不再被抹掉）；
 #          Refresh 失败（fetched 为空）时列表原样保留（修复原实现整表清空缺陷）
-#   阶段15 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
+#   阶段14 组装 dist/aiplugin-patched.jar（原 jar + 替换/新增 class）
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -79,13 +79,13 @@ java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool timeline "$WORK/classes-o
 echo "[12/15] 阶段11：补丁 RunShellCommandHandler/RunShellCommandTool（pwsh 优先 + 动态文案）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool winshell "$WORK/classes-orig" "$PATCHED"
 
-echo "[13/15] 阶段13：补丁 ModelInformationTablePanel（Available Models 工具栏 + 按钮）..."
+echo "[13/15] 阶段12：补丁 ModelInformationTablePanel（Available Models 工具栏 + 按钮）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool modelstable "$WORK/classes-orig" "$PATCHED"
 
-echo "[14/15] 阶段14：补丁 ModelInformationTablePanel\$Companion（updateModelList → mergeModelList）..."
+echo "[14/15] 阶段13：补丁 ModelInformationTablePanel\$Companion（updateModelList → mergeModelList）..."
 java "$JAVA_ENC" -cp "$WORK/tools-out:$ASMC" PatchTool modelsmerge "$WORK/classes-orig" "$PATCHED"
 
-echo "[15/15] 阶段15：组装 $DIST/aiplugin-patched.jar ..."
+echo "[15/15] 阶段14：组装 $DIST/aiplugin-patched.jar ..."
 cp "$PLUGIN_JAR" "$DIST/aiplugin-patched.jar"
 jar uf "$DIST/aiplugin-patched.jar" \
   -C "$PATCHED" "com/android/studio/ml/modelproviders/data/ProviderData\$RemoteProviderData.class" \

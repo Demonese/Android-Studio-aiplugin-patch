@@ -120,7 +120,9 @@ public final class AvailableModelsToolbarSupport {
     }
 
     /**
-     * Companion.updateModelList 的替换实现（PatchTool modelsmerge：方法体前置早退）。
+     * Companion.updateModelList 的替换实现（PatchTool modelsmerge：清除原方法体后
+     * 写入 [aload_1, aload_2, invokestatic 本方法, return] 直线调用；保留死代码会在
+     * HotSpot 下触发 VerifyError，详见 PatchTool 注释）。
      *
      * 与原实现的差异（原实现：仅按 fetched 重建、孤儿丢弃）：
      * 1. 保留孤儿条目（不在 fetched 中的既有条目追加到列表尾部）——
