@@ -1,3 +1,11 @@
+# 该项目已终结
+
+**喜报：谷歌也知道自己给 Android Studio 开发的内置 Agent 一坨屎，从 2026.2.2 版本开始允许安装切换到 Claude Code、Codex 等 Agent，大家再也不用吃谷歌拉的屎了！**
+
+![New Agent](docs/new-agent.jpg)
+
+---
+
 # Android Studio aiplugin patch
 
 对 Android Studio Gemini 插件（`plugins/gemini/lib/aiplugin.jar`，闭源）的字节码补丁项目。
